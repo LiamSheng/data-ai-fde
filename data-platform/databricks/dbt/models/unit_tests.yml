@@ -1,0 +1,428 @@
+version: 2
+unit_tests:
+  - name: unchanged_payload_remains_two_observations
+    model: int_vehicle_observations
+    given:
+      - input: ref('stg_capture_attempts')
+        rows:
+          - {attempt_id: first, poll_cycle_id: cycle1, payload_sha256: same, started_at_utc: '2026-10-12 23:50:00', completed_at_utc: '2026-10-12 23:50:44', feed_timestamp: '2026-10-12 23:50:30', feed_age_seconds: 14.0, incrementality: FULL_DATASET, feed_type: vehicle_positions, is_success: true}
+          - {attempt_id: second, poll_cycle_id: cycle2, payload_sha256: same, started_at_utc: '2026-10-13 00:00:00', completed_at_utc: '2026-10-13 00:00:44', feed_timestamp: '2026-10-12 23:50:30', feed_age_seconds: 614.0, incrementality: FULL_DATASET, feed_type: vehicle_positions, is_success: true}
+      - input: ref('stg_vehicle_positions')
+        rows:
+          - {payload_sha256: same, entity_index: 0, entity_id: E1, vehicle_id: V1, trip_id: T1, route_id: R1, has_vehicle: true, is_deleted: false}
+    expect:
+      rows:
+        - {attempt_id: first, entity_index: 0, vehicle_id: V1}
+        - {attempt_id: second, entity_index: 0, vehicle_id: V1}
+  - name: route_count_uses_distinct_vehicle_ids
+    model: route_vehicle_counts
+    given:
+      - input: ref('int_vehicle_observations')
+        rows:
+          - {attempt_id: sample, poll_cycle_id: cycle, payload_sha256: rt, feed_timestamp: '2026-10-12 23:50:30', completed_at_utc: '2026-10-12 23:50:44', feed_age_seconds: 14.0, route_id: R1, vehicle_id: V1, is_full_snapshot: true}
+          - {attempt_id: sample, poll_cycle_id: cycle, payload_sha256: rt, feed_timestamp: '2026-10-12 23:50:30', completed_at_utc: '2026-10-12 23:50:44', feed_age_seconds: 14.0, route_id: R1, vehicle_id: V1, is_full_snapshot: true}
+      - input: ref('dim_reference_routes')
+        rows:
+          - {route_id: R1, route_short_name: '1', route_long_name: Example}
+    expect:
+      rows:
+        - {attempt_id: sample, route_id: R1, vehicle_record_count: 2, observed_vehicle_count: 1, missing_vehicle_id_records: 0, static_route_matched: true}
+  - name: unmatched_route_remains_visible
+    model: route_vehicle_counts
+    given:
+      - input: ref('int_vehicle_observations')
+        rows:
+          - {attempt_id: sample, poll_cycle_id: cycle, payload_sha256: rt, feed_timestamp: '2026-10-12 23:50:30', completed_at_utc: '2026-10-12 23:50:44', feed_age_seconds: 14.0, route_id: UNKNOWN, vehicle_id: V1, is_full_snapshot: true}
+      - input: ref('dim_reference_routes')
+        rows:
+          - {route_id: R1, route_short_name: '1', route_long_name: Example}
+    expect:
+      rows:
+        - {attempt_id: sample, route_id: UNKNOWN, observed_vehicle_count: 1, static_route_matched: false, static_linkage_status: unverified_reference}
+  - name: empty_full_snapshot_reports_zero
+    model: snapshot_status
+    given:
+      - input: ref('stg_capture_attempts')
+        rows:
+          - {attempt_id: empty, poll_cycle_id: cycle, payload_sha256: rt, feed_timestamp: '2026-10-12 23:50:30', completed_at_utc: '2026-10-12 23:50:44', feed_age_seconds: 14.0, incrementality: FULL_DATASET, entity_count: 0, feed_type: vehicle_positions, is_success: true}
+      - input: ref('int_vehicle_observations')
+        rows: []
+    expect:
+      rows:
+        - {attempt_id: empty, snapshot_supported: true, active_vehicle_record_count: 0, observed_vehicle_count: 0, missing_vehicle_id_records: 0, missing_route_id_records: 0}
+  - name: trip_update_staging_keeps_audited_payloads_and_defaults_relationships
+    model: stg_trip_updates
+    given:
+      - input: source('bronze', 'trip_updates')
+        rows:
+          # 07:30 UTC on Oct 13 is 00:30 in Vancouver; the service date stays Oct 12.
+          - {payload_sha256: published, entity_index: 0, feed_timestamp: '2026-10-13 07:30:00', has_trip_update: true, trip_id: T1, route_id: '', start_date: '20261012', trip_schedule_relationship: null, update_index: 0, stop_sequence: 3, stop_id: ' ', stop_schedule_relationship: null, arrival_delay: 30}
+          - {payload_sha256: published, entity_index: 1, has_trip_update: true, trip_id: T2, route_id: '6641', start_date: '20261012', trip_schedule_relationship: CANCELED, update_index: null}
+          - {payload_sha256: unpublished, entity_index: 0, has_trip_update: true, trip_id: T3, start_date: '20261012', update_index: 0}
+      - input: ref('stg_capture_attempts')
+        rows:
+          - {attempt_id: tu, feed_type: trip_updates, is_success: true, payload_sha256: published}
+          - {attempt_id: failed, feed_type: trip_updates, is_success: false, payload_sha256: unpublished}
+    expect:
+      rows:
+        - {payload_sha256: published, entity_index: 0, trip_id: T1, route_id: null, service_date: '2026-10-12', trip_schedule_relationship: SCHEDULED, update_index: 0, stop_id: null, stop_schedule_relationship: SCHEDULED}
+        - {payload_sha256: published, entity_index: 1, trip_id: T2, route_id: '6641', service_date: '2026-10-12', trip_schedule_relationship: CANCELED, update_index: null, stop_id: null, stop_schedule_relationship: null}
+  - name: repeated_capture_of_one_payload_yields_one_snapshot
+    # fct_trip_delay_sample reads only stg_trip_updates, so a payload captured by two
+    # attempts must reach it once; a join to attempts would double every sample.
+    model: stg_trip_updates
+    given:
+      - input: source('bronze', 'trip_updates')
+        rows:
+          - {payload_sha256: same, entity_index: 0, has_trip_update: true, trip_id: T1, start_date: '20261013', update_index: 0, stop_sequence: 4}
+          - {payload_sha256: same, entity_index: 0, has_trip_update: true, trip_id: T1, start_date: '20261013', update_index: 1, stop_sequence: 5}
+      - input: ref('stg_capture_attempts')
+        rows:
+          - {attempt_id: first, feed_type: trip_updates, is_success: true, payload_sha256: same}
+          - {attempt_id: second, feed_type: trip_updates, is_success: true, payload_sha256: same}
+    expect:
+      rows:
+        - {payload_sha256: same, trip_id: T1, update_index: 0}
+        - {payload_sha256: same, trip_id: T1, update_index: 1}
+  - name: next_stop_ignores_array_order_and_unscheduled_stops
+    model: fct_trip_delay_sample
+    given:
+      - input: ref('stg_trip_updates')
+        rows:
+          - {payload_sha256: snap, entity_index: 0, feed_timestamp: '2026-10-12 23:50:00', service_date: '2026-10-12', trip_id: T1, trip_schedule_relationship: SCHEDULED, update_index: 0, stop_sequence: 9, stop_id: S9, stop_schedule_relationship: SCHEDULED, arrival_time: '2026-10-12 23:58:00', arrival_delay: 60}
+          - {payload_sha256: snap, entity_index: 0, feed_timestamp: '2026-10-12 23:50:00', service_date: '2026-10-12', trip_id: T1, trip_schedule_relationship: SCHEDULED, update_index: 1, stop_sequence: 5, stop_id: S5, stop_schedule_relationship: SKIPPED, arrival_time: null, arrival_delay: null}
+          - {payload_sha256: snap, entity_index: 0, feed_timestamp: '2026-10-12 23:50:00', service_date: '2026-10-12', trip_id: T1, trip_schedule_relationship: SCHEDULED, update_index: 2, stop_sequence: 6, stop_id: S6, stop_schedule_relationship: NO_DATA, arrival_time: null, arrival_delay: null}
+          - {payload_sha256: snap, entity_index: 0, feed_timestamp: '2026-10-12 23:50:00', service_date: '2026-10-12', trip_id: T1, trip_schedule_relationship: SCHEDULED, update_index: 3, stop_sequence: 8, stop_id: S8, stop_schedule_relationship: SCHEDULED, arrival_time: '2026-10-12 23:54:00', arrival_delay: 120}
+      - input: ref('service_date_overrides')
+        rows: []
+      - input: ref('dim_routes')
+        rows: []
+    expect:
+      rows:
+        - {payload_sha256: snap, trip_id: T1, next_stop_sequence: 8, next_stop_id: S8, current_delay_seconds: 120, prediction_lead_seconds: 240}
+  - name: canceled_trip_yields_no_sample
+    model: fct_trip_delay_sample
+    given:
+      - input: ref('stg_trip_updates')
+        rows:
+          - {payload_sha256: snap, entity_index: 0, feed_timestamp: '2026-10-12 23:50:00', service_date: '2026-10-12', trip_id: T1, trip_schedule_relationship: CANCELED, update_index: 0, stop_sequence: 3, stop_schedule_relationship: SCHEDULED, arrival_time: '2026-10-12 23:52:00', arrival_delay: 600}
+          - {payload_sha256: snap, entity_index: 1, feed_timestamp: '2026-10-12 23:50:00', service_date: '2026-10-12', trip_id: T2, trip_schedule_relationship: CANCELED, update_index: null}
+      - input: ref('service_date_overrides')
+        rows: []
+      - input: ref('dim_routes')
+        rows: []
+    expect:
+      rows: []
+  - name: early_running_keeps_negative_delay
+    model: fct_trip_delay_sample
+    given:
+      - input: ref('stg_trip_updates')
+        rows:
+          - {payload_sha256: snap, entity_index: 0, feed_timestamp: '2026-10-12 23:50:00', service_date: '2026-10-12', trip_id: T1, trip_schedule_relationship: SCHEDULED, update_index: 0, stop_sequence: 4, stop_schedule_relationship: SCHEDULED, arrival_time: '2026-10-12 23:51:00', arrival_delay: -90}
+      - input: ref('service_date_overrides')
+        rows: []
+      - input: ref('dim_routes')
+        rows: []
+    expect:
+      rows:
+        - {trip_id: T1, current_delay_seconds: -90}
+  - name: after_midnight_keeps_service_date_and_hour_zero
+    model: fct_trip_delay_sample
+    given:
+      - input: ref('stg_trip_updates')
+        rows:
+          # 07:30 UTC on Oct 13 is 00:30 in Vancouver (PDT); the trip started on Oct 12.
+          - {payload_sha256: snap, entity_index: 0, feed_timestamp: '2026-10-13 07:30:00', service_date: '2026-10-12', trip_id: T1, trip_schedule_relationship: SCHEDULED, update_index: 0, stop_sequence: 12, stop_schedule_relationship: SCHEDULED, arrival_time: '2026-10-13 07:32:00', arrival_delay: 45}
+      - input: ref('service_date_overrides')
+        rows: []
+      - input: ref('dim_routes')
+        rows: []
+    expect:
+      rows:
+        - {trip_id: T1, service_date: '2026-10-12', observation_hour: 0, prediction_lead_seconds: 120}
+  - name: prediction_already_past_yields_no_sample
+    # A predicted arrival before the feed timestamp means the vehicle has passed the
+    # stop or the prediction is stale; lead 0 is still a sample.
+    model: fct_trip_delay_sample
+    given:
+      - input: ref('stg_trip_updates')
+        rows:
+          - {payload_sha256: snap, entity_index: 0, feed_timestamp: '2026-10-12 23:50:00', service_date: '2026-10-12', trip_id: AT_FEED_TIME, trip_schedule_relationship: SCHEDULED, update_index: 0, stop_sequence: 5, stop_schedule_relationship: SCHEDULED, arrival_time: '2026-10-12 23:50:00', arrival_delay: 30}
+          - {payload_sha256: snap, entity_index: 1, feed_timestamp: '2026-10-12 23:50:00', service_date: '2026-10-12', trip_id: ONE_SECOND_PAST, trip_schedule_relationship: SCHEDULED, update_index: 0, stop_sequence: 5, stop_schedule_relationship: SCHEDULED, arrival_time: '2026-10-12 23:49:59', arrival_delay: 30}
+      - input: ref('service_date_overrides')
+        rows: []
+      - input: ref('dim_routes')
+        rows: []
+    expect:
+      rows:
+        - {trip_id: AT_FEED_TIME, prediction_lead_seconds: 0}
+  - name: only_scheduled_and_duplicated_trips_yield_samples
+    # DELETED trips are withdrawn like canceled ones; ADDED trips have no schedule to
+    # be late against.
+    model: fct_trip_delay_sample
+    given:
+      - input: ref('stg_trip_updates')
+        rows:
+          - {payload_sha256: snap, entity_index: 0, feed_timestamp: '2026-10-12 23:50:00', service_date: '2026-10-12', trip_id: SCHEDULED, trip_schedule_relationship: SCHEDULED, update_index: 0, stop_sequence: 5, stop_schedule_relationship: SCHEDULED, arrival_time: '2026-10-12 23:52:00', arrival_delay: 30}
+          - {payload_sha256: snap, entity_index: 1, feed_timestamp: '2026-10-12 23:50:00', service_date: '2026-10-12', trip_id: DUPLICATED, trip_schedule_relationship: DUPLICATED, update_index: 0, stop_sequence: 5, stop_schedule_relationship: SCHEDULED, arrival_time: '2026-10-12 23:52:00', arrival_delay: 30}
+          - {payload_sha256: snap, entity_index: 2, feed_timestamp: '2026-10-12 23:50:00', service_date: '2026-10-12', trip_id: DELETED, trip_schedule_relationship: DELETED, update_index: 0, stop_sequence: 5, stop_schedule_relationship: SCHEDULED, arrival_time: '2026-10-12 23:52:00', arrival_delay: 30}
+          - {payload_sha256: snap, entity_index: 3, feed_timestamp: '2026-10-12 23:50:00', service_date: '2026-10-12', trip_id: ADDED, trip_schedule_relationship: ADDED, update_index: 0, stop_sequence: 5, stop_schedule_relationship: SCHEDULED, arrival_time: '2026-10-12 23:52:00', arrival_delay: 30}
+          - {payload_sha256: snap, entity_index: 4, feed_timestamp: '2026-10-12 23:50:00', service_date: '2026-10-12', trip_id: UNSCHEDULED, trip_schedule_relationship: UNSCHEDULED, update_index: 0, stop_sequence: 5, stop_schedule_relationship: SCHEDULED, arrival_time: '2026-10-12 23:52:00', arrival_delay: 30}
+      - input: ref('service_date_overrides')
+        rows: []
+      - input: ref('dim_routes')
+        rows: []
+    expect:
+      rows:
+        - {trip_id: SCHEDULED}
+        - {trip_id: DUPLICATED}
+  - name: duplicated_trip_keeps_its_own_sample
+    # A DUPLICATED entity reuses the trip_id of the trip it copies; samples are keyed
+    # by entity, so both stay.
+    model: fct_trip_delay_sample
+    given:
+      - input: ref('stg_trip_updates')
+        rows:
+          - {payload_sha256: snap, entity_index: 0, feed_timestamp: '2026-10-12 23:50:00', service_date: '2026-10-12', trip_id: T1, trip_schedule_relationship: SCHEDULED, update_index: 0, stop_sequence: 5, stop_schedule_relationship: SCHEDULED, arrival_time: '2026-10-12 23:52:00', arrival_delay: 30}
+          - {payload_sha256: snap, entity_index: 1, feed_timestamp: '2026-10-12 23:50:00', service_date: '2026-10-12', trip_id: T1, trip_schedule_relationship: DUPLICATED, update_index: 0, stop_sequence: 3, stop_schedule_relationship: SCHEDULED, arrival_time: '2026-10-12 23:53:00', arrival_delay: 90}
+      - input: ref('service_date_overrides')
+        rows: []
+      - input: ref('dim_routes')
+        rows: []
+    expect:
+      rows:
+        - {entity_index: 0, trip_id: T1, current_delay_seconds: 30}
+        - {entity_index: 1, trip_id: T1, current_delay_seconds: 90}
+  - name: trip_not_yet_departed_yields_no_sample
+    model: fct_trip_delay_sample
+    given:
+      - input: ref('stg_trip_updates')
+        rows:
+          # The origin is the Next stop; the later stop must not stand in for it.
+          - {payload_sha256: snap, entity_index: 0, feed_timestamp: '2026-10-12 23:50:00', service_date: '2026-10-12', trip_id: T1, trip_schedule_relationship: SCHEDULED, update_index: 0, stop_sequence: 1, stop_schedule_relationship: SCHEDULED, arrival_time: '2026-10-12 23:52:00', arrival_delay: 0}
+          - {payload_sha256: snap, entity_index: 0, feed_timestamp: '2026-10-12 23:50:00', service_date: '2026-10-12', trip_id: T1, trip_schedule_relationship: SCHEDULED, update_index: 1, stop_sequence: 2, stop_schedule_relationship: SCHEDULED, arrival_time: '2026-10-12 23:53:00', arrival_delay: 0}
+      - input: ref('service_date_overrides')
+        rows: []
+      - input: ref('dim_routes')
+        rows: []
+    expect:
+      rows: []
+  - name: prediction_lead_boundary_is_inclusive
+    model: fct_trip_delay_sample
+    given:
+      - input: ref('stg_trip_updates')
+        rows:
+          - {payload_sha256: snap, entity_index: 0, feed_timestamp: '2026-10-12 23:50:00', service_date: '2026-10-12', trip_id: AT_LIMIT, trip_schedule_relationship: SCHEDULED, update_index: 0, stop_sequence: 5, stop_schedule_relationship: SCHEDULED, arrival_time: '2026-10-12 23:55:00', arrival_delay: 30}
+          - {payload_sha256: snap, entity_index: 1, feed_timestamp: '2026-10-12 23:50:00', service_date: '2026-10-12', trip_id: PAST_LIMIT, trip_schedule_relationship: SCHEDULED, update_index: 0, stop_sequence: 5, stop_schedule_relationship: SCHEDULED, arrival_time: '2026-10-12 23:55:01', arrival_delay: 30}
+      - input: ref('service_date_overrides')
+        rows: []
+      - input: ref('dim_routes')
+        rows: []
+    expect:
+      rows:
+        - {trip_id: AT_LIMIT, prediction_lead_seconds: 300}
+  - name: prediction_lead_limit_follows_var
+    model: fct_trip_delay_sample
+    overrides:
+      vars:
+        delay_sample_max_lead_seconds: 600
+    given:
+      - input: ref('stg_trip_updates')
+        rows:
+          - {payload_sha256: snap, entity_index: 0, feed_timestamp: '2026-10-12 23:50:00', service_date: '2026-10-12', trip_id: WITHIN, trip_schedule_relationship: SCHEDULED, update_index: 0, stop_sequence: 5, stop_schedule_relationship: SCHEDULED, arrival_time: '2026-10-12 23:55:01', arrival_delay: 30}
+          - {payload_sha256: snap, entity_index: 1, feed_timestamp: '2026-10-12 23:50:00', service_date: '2026-10-12', trip_id: BEYOND, trip_schedule_relationship: SCHEDULED, update_index: 0, stop_sequence: 5, stop_schedule_relationship: SCHEDULED, arrival_time: '2026-10-13 00:00:01', arrival_delay: 30}
+      - input: ref('service_date_overrides')
+        rows: []
+      - input: ref('dim_routes')
+        rows: []
+    expect:
+      rows:
+        - {trip_id: WITHIN, prediction_lead_seconds: 301}
+  - name: late_sample_starts_at_threshold
+    model: fct_trip_delay_sample
+    given:
+      - input: ref('stg_trip_updates')
+        rows:
+          - {payload_sha256: snap, entity_index: 0, feed_timestamp: '2026-10-12 23:50:00', service_date: '2026-10-12', trip_id: AT_THRESHOLD, trip_schedule_relationship: SCHEDULED, update_index: 0, stop_sequence: 5, stop_schedule_relationship: SCHEDULED, arrival_time: '2026-10-12 23:54:00', arrival_delay: 300}
+          - {payload_sha256: snap, entity_index: 1, feed_timestamp: '2026-10-12 23:50:00', service_date: '2026-10-12', trip_id: JUST_UNDER, trip_schedule_relationship: SCHEDULED, update_index: 0, stop_sequence: 5, stop_schedule_relationship: SCHEDULED, arrival_time: '2026-10-12 23:54:00', arrival_delay: 299}
+          - {payload_sha256: snap, entity_index: 2, feed_timestamp: '2026-10-12 23:50:00', service_date: '2026-10-12', trip_id: EARLY, trip_schedule_relationship: SCHEDULED, update_index: 0, stop_sequence: 5, stop_schedule_relationship: SCHEDULED, arrival_time: '2026-10-12 23:54:00', arrival_delay: -400}
+      - input: ref('service_date_overrides')
+        rows: []
+      - input: ref('dim_routes')
+        rows: []
+    expect:
+      rows:
+        - {trip_id: AT_THRESHOLD, current_delay_seconds: 300, is_late: true}
+        - {trip_id: JUST_UNDER, current_delay_seconds: 299, is_late: false}
+        - {trip_id: EARLY, current_delay_seconds: -400, is_late: false}
+  - name: suspect_delay_is_flagged_not_dropped
+    model: fct_trip_delay_sample
+    given:
+      - input: ref('stg_trip_updates')
+        rows:
+          - {payload_sha256: snap, entity_index: 0, feed_timestamp: '2026-10-12 23:50:00', service_date: '2026-10-12', trip_id: AT_LIMIT, trip_schedule_relationship: SCHEDULED, update_index: 0, stop_sequence: 5, stop_schedule_relationship: SCHEDULED, arrival_time: '2026-10-12 23:54:00', arrival_delay: 3600}
+          - {payload_sha256: snap, entity_index: 1, feed_timestamp: '2026-10-12 23:50:00', service_date: '2026-10-12', trip_id: LATE_OUTLIER, trip_schedule_relationship: SCHEDULED, update_index: 0, stop_sequence: 5, stop_schedule_relationship: SCHEDULED, arrival_time: '2026-10-12 23:54:00', arrival_delay: 3601}
+          - {payload_sha256: snap, entity_index: 2, feed_timestamp: '2026-10-12 23:50:00', service_date: '2026-10-12', trip_id: EARLY_OUTLIER, trip_schedule_relationship: SCHEDULED, update_index: 0, stop_sequence: 5, stop_schedule_relationship: SCHEDULED, arrival_time: '2026-10-12 23:54:00', arrival_delay: -3601}
+      - input: ref('service_date_overrides')
+        rows: []
+      - input: ref('dim_routes')
+        rows: []
+    expect:
+      rows:
+        - {trip_id: AT_LIMIT, current_delay_seconds: 3600, is_suspect_delay: false, is_late: true}
+        - {trip_id: LATE_OUTLIER, current_delay_seconds: 3601, is_suspect_delay: true, is_late: true}
+        - {trip_id: EARLY_OUTLIER, current_delay_seconds: -3601, is_suspect_delay: true, is_late: false}
+  - name: late_and_suspect_thresholds_follow_vars
+    model: fct_trip_delay_sample
+    overrides:
+      vars:
+        late_threshold_seconds: 600
+        suspect_delay_limit_seconds: 1800
+    given:
+      - input: ref('stg_trip_updates')
+        rows:
+          - {payload_sha256: snap, entity_index: 0, feed_timestamp: '2026-10-12 23:50:00', service_date: '2026-10-12', trip_id: LATE_ONLY_AT_DEFAULT, trip_schedule_relationship: SCHEDULED, update_index: 0, stop_sequence: 5, stop_schedule_relationship: SCHEDULED, arrival_time: '2026-10-12 23:54:00', arrival_delay: 300}
+          - {payload_sha256: snap, entity_index: 1, feed_timestamp: '2026-10-12 23:50:00', service_date: '2026-10-12', trip_id: LATE_WHEN_TUNED, trip_schedule_relationship: SCHEDULED, update_index: 0, stop_sequence: 5, stop_schedule_relationship: SCHEDULED, arrival_time: '2026-10-12 23:54:00', arrival_delay: 600}
+          - {payload_sha256: snap, entity_index: 2, feed_timestamp: '2026-10-12 23:50:00', service_date: '2026-10-12', trip_id: SUSPECT_WHEN_TUNED, trip_schedule_relationship: SCHEDULED, update_index: 0, stop_sequence: 5, stop_schedule_relationship: SCHEDULED, arrival_time: '2026-10-12 23:54:00', arrival_delay: 1801}
+      - input: ref('service_date_overrides')
+        rows: []
+      - input: ref('dim_routes')
+        rows: []
+    expect:
+      rows:
+        - {trip_id: LATE_ONLY_AT_DEFAULT, current_delay_seconds: 300, is_late: false, is_suspect_delay: false}
+        - {trip_id: LATE_WHEN_TUNED, current_delay_seconds: 600, is_late: true, is_suspect_delay: false}
+        - {trip_id: SUSPECT_WHEN_TUNED, current_delay_seconds: 1801, is_late: true, is_suspect_delay: true}
+  - name: day_type_checks_overrides_before_day_of_week
+    model: fct_trip_delay_sample
+    given:
+      - input: ref('stg_trip_updates')
+        rows:
+          - {payload_sha256: snap, entity_index: 0, feed_timestamp: '2026-10-12 18:00:00', service_date: '2026-10-12', trip_id: THANKSGIVING_MONDAY, trip_schedule_relationship: SCHEDULED, update_index: 0, stop_sequence: 5, stop_schedule_relationship: SCHEDULED, arrival_time: '2026-10-12 18:02:00', arrival_delay: 0}
+          - {payload_sha256: snap, entity_index: 1, feed_timestamp: '2026-10-05 18:00:00', service_date: '2026-10-05', trip_id: ORDINARY_MONDAY, trip_schedule_relationship: SCHEDULED, update_index: 0, stop_sequence: 5, stop_schedule_relationship: SCHEDULED, arrival_time: '2026-10-05 18:02:00', arrival_delay: 0}
+          - {payload_sha256: snap, entity_index: 2, feed_timestamp: '2026-10-10 18:00:00', service_date: '2026-10-10', trip_id: SATURDAY, trip_schedule_relationship: SCHEDULED, update_index: 0, stop_sequence: 5, stop_schedule_relationship: SCHEDULED, arrival_time: '2026-10-10 18:02:00', arrival_delay: 0}
+          - {payload_sha256: snap, entity_index: 3, feed_timestamp: '2026-10-11 18:00:00', service_date: '2026-10-11', trip_id: SUNDAY, trip_schedule_relationship: SCHEDULED, update_index: 0, stop_sequence: 5, stop_schedule_relationship: SCHEDULED, arrival_time: '2026-10-11 18:02:00', arrival_delay: 0}
+          - {payload_sha256: snap, entity_index: 4, feed_timestamp: '2026-10-10 07:30:00', service_date: '2026-10-09', trip_id: FRIDAY_AFTER_MIDNIGHT, trip_schedule_relationship: SCHEDULED, update_index: 0, stop_sequence: 5, stop_schedule_relationship: SCHEDULED, arrival_time: '2026-10-10 07:32:00', arrival_delay: 0}
+      - input: ref('service_date_overrides')
+        rows:
+          - {service_date: '2026-10-12', day_type: sunday}
+      - input: ref('dim_routes')
+        rows: []
+    expect:
+      rows:
+        - {trip_id: THANKSGIVING_MONDAY, service_date: '2026-10-12', day_type: sunday}
+        - {trip_id: ORDINARY_MONDAY, service_date: '2026-10-05', day_type: weekday}
+        - {trip_id: SATURDAY, service_date: '2026-10-10', day_type: saturday}
+        - {trip_id: SUNDAY, service_date: '2026-10-11', day_type: sunday}
+        - {trip_id: FRIDAY_AFTER_MIDNIGHT, service_date: '2026-10-09', day_type: weekday}
+  - name: route_display_name_strips_zeros_or_falls_back_to_long_name
+    model: dim_routes
+    given:
+      - input: ref('stg_routes')
+        rows:
+          - {static_payload_sha256: v1, route_id: '6641', route_short_name: '099', route_long_name: Commercial-Broadway/UBC (B-Line), route_type: 3}
+          - {static_payload_sha256: v1, route_id: '30052', route_short_name: '', route_long_name: Expo Line, route_type: 1}
+          - {static_payload_sha256: v1, route_id: '12345', route_short_name: null, route_long_name: SeaBus, route_type: 4}
+          - {static_payload_sha256: v1, route_id: '6612', route_short_name: R4, route_long_name: 41st Ave, route_type: 3}
+      - input: ref('int_latest_static_version')
+        rows:
+          - {payload_sha256: v1}
+    expect:
+      rows:
+        - {route_id: '6641', route_short_name: '099', route_display_name: '99'}
+        - {route_id: '30052', route_short_name: '', route_display_name: Expo Line}
+        - {route_id: '12345', route_short_name: null, route_display_name: SeaBus}
+        - {route_id: '6612', route_short_name: R4, route_display_name: R4}
+  - name: latest_static_version_is_the_latest_successful_loaded_capture
+    model: int_latest_static_version
+    given:
+      - input: ref('stg_routes')
+        rows:
+          - {static_payload_sha256: older, route_id: '6641'}
+          - {static_payload_sha256: newer, route_id: '6641'}
+          - {static_payload_sha256: newer, route_id: '6612'}
+      - input: ref('stg_capture_attempts')
+        rows:
+          - {attempt_id: first, feed_type: gtfs_schedule, is_success: true, payload_sha256: older, completed_at_utc: '2026-10-01 12:00:00'}
+          - {attempt_id: second, feed_type: gtfs_schedule, is_success: true, payload_sha256: newer, completed_at_utc: '2026-10-08 12:00:00'}
+          # A later failed attempt and a later realtime capture do not choose a version.
+          - {attempt_id: failed, feed_type: gtfs_schedule, is_success: false, payload_sha256: older, completed_at_utc: '2026-10-10 12:00:00'}
+          - {attempt_id: realtime, feed_type: trip_updates, is_success: true, payload_sha256: older, completed_at_utc: '2026-10-11 12:00:00'}
+          # Captured but whose routes are not in Bronze yet: only loaded versions count.
+          - {attempt_id: unloaded, feed_type: gtfs_schedule, is_success: true, payload_sha256: not_loaded, completed_at_utc: '2026-10-12 12:00:00'}
+    expect:
+      rows:
+        - {payload_sha256: newer}
+  - name: route_dimension_uses_the_latest_static_version
+    model: dim_routes
+    given:
+      - input: ref('stg_routes')
+        rows:
+          - {static_payload_sha256: older, route_id: '6641', route_short_name: '099', route_long_name: Old Name}
+          - {static_payload_sha256: newer, route_id: '6641', route_short_name: '099', route_long_name: New Name}
+      - input: ref('int_latest_static_version')
+        rows:
+          - {payload_sha256: newer}
+    expect:
+      rows:
+        - {static_payload_sha256: newer, route_id: '6641', route_long_name: New Name}
+  - name: samples_carry_route_display_name_and_unmatched_stay_visible
+    model: fct_trip_delay_sample
+    given:
+      - input: ref('stg_trip_updates')
+        rows:
+          - {payload_sha256: snap, entity_index: 0, feed_timestamp: '2026-10-12 23:50:00', service_date: '2026-10-12', trip_id: MATCHED, route_id: '6641', trip_schedule_relationship: SCHEDULED, update_index: 0, stop_sequence: 5, stop_schedule_relationship: SCHEDULED, arrival_time: '2026-10-12 23:54:00', arrival_delay: 60}
+          - {payload_sha256: snap, entity_index: 1, feed_timestamp: '2026-10-12 23:50:00', service_date: '2026-10-12', trip_id: UNKNOWN_ROUTE, route_id: '9999', trip_schedule_relationship: SCHEDULED, update_index: 0, stop_sequence: 5, stop_schedule_relationship: SCHEDULED, arrival_time: '2026-10-12 23:54:00', arrival_delay: 60}
+          - {payload_sha256: snap, entity_index: 2, feed_timestamp: '2026-10-12 23:50:00', service_date: '2026-10-12', trip_id: NO_ROUTE, route_id: null, trip_schedule_relationship: SCHEDULED, update_index: 0, stop_sequence: 5, stop_schedule_relationship: SCHEDULED, arrival_time: '2026-10-12 23:54:00', arrival_delay: 60}
+      - input: ref('service_date_overrides')
+        rows: []
+      - input: ref('dim_routes')
+        rows:
+          - {route_id: '6641', route_display_name: '99'}
+    expect:
+      rows:
+        - {trip_id: MATCHED, route_id: '6641', route_display_name: '99'}
+        - {trip_id: UNKNOWN_ROUTE, route_id: '9999', route_display_name: null}
+        - {trip_id: NO_ROUTE, route_id: null, route_display_name: null}
+  - name: day_type_overrides_come_from_the_latest_static_calendar
+    # Single Day type services run only Monday-Friday, only Saturday or only Sunday.
+    # A date takes the Day type of the single Day type services running on it, when
+    # they agree and differ from its day of the week.
+    model: service_date_overrides
+    given:
+      - input: ref('int_latest_static_version')
+        rows:
+          - {payload_sha256: latest}
+      - input: ref('stg_calendar')
+        rows:
+          - {static_payload_sha256: latest, service_id: WEEKDAY, monday: true, tuesday: true, wednesday: true, thursday: true, friday: true, saturday: false, sunday: false, start_date: '2026-09-07', end_date: '2027-01-03'}
+          - {static_payload_sha256: latest, service_id: SATURDAY, monday: false, tuesday: false, wednesday: false, thursday: false, friday: false, saturday: true, sunday: false, start_date: '2026-09-07', end_date: '2027-01-03'}
+          - {static_payload_sha256: latest, service_id: SUNDAY, monday: false, tuesday: false, wednesday: false, thursday: false, friday: false, saturday: false, sunday: true, start_date: '2026-09-07', end_date: '2027-01-03'}
+          - {static_payload_sha256: latest, service_id: EVERY_DAY, monday: true, tuesday: true, wednesday: true, thursday: true, friday: true, saturday: true, sunday: true, start_date: '2026-09-07', end_date: '2027-01-03'}
+          - {static_payload_sha256: latest, service_id: SPECIAL, monday: false, tuesday: false, wednesday: false, thursday: false, friday: false, saturday: false, sunday: false, start_date: '2026-09-07', end_date: '2027-01-03'}
+          - {static_payload_sha256: older, service_id: WEEKDAY, monday: true, tuesday: true, wednesday: true, thursday: true, friday: true, saturday: false, sunday: false, start_date: '2026-09-07', end_date: '2027-01-03'}
+          - {static_payload_sha256: older, service_id: SUNDAY, monday: false, tuesday: false, wednesday: false, thursday: false, friday: false, saturday: false, sunday: true, start_date: '2026-09-07', end_date: '2027-01-03'}
+      - input: ref('stg_calendar_dates')
+        rows:
+          # Thanksgiving Monday: weekday service removed, Sunday service added.
+          - {static_payload_sha256: latest, service_id: WEEKDAY, service_date: '2026-10-12', exception_type: 2}
+          - {static_payload_sha256: latest, service_id: SUNDAY, service_date: '2026-10-12', exception_type: 1}
+          # A Monday running Saturday service.
+          - {static_payload_sha256: latest, service_id: WEEKDAY, service_date: '2026-12-28', exception_type: 2}
+          - {static_payload_sha256: latest, service_id: SATURDAY, service_date: '2026-12-28', exception_type: 1}
+          # Removal alone leaves no single Day type service running.
+          - {static_payload_sha256: latest, service_id: WEEKDAY, service_date: '2026-10-13', exception_type: 2}
+          # Weekday and Sunday service both running: no single Day type.
+          - {static_payload_sha256: latest, service_id: SUNDAY, service_date: '2026-10-14', exception_type: 1}
+          # Adding a special or every-day service changes nothing.
+          - {static_payload_sha256: latest, service_id: SPECIAL, service_date: '2026-10-15', exception_type: 1}
+          - {static_payload_sha256: latest, service_id: EVERY_DAY, service_date: '2026-10-15', exception_type: 1}
+          # A Saturday adding Saturday service matches its day of the week.
+          - {static_payload_sha256: latest, service_id: SATURDAY, service_date: '2026-12-26', exception_type: 1}
+          # Only the latest version counts.
+          - {static_payload_sha256: older, service_id: WEEKDAY, service_date: '2026-10-16', exception_type: 2}
+          - {static_payload_sha256: older, service_id: SUNDAY, service_date: '2026-10-16', exception_type: 1}
+    expect:
+      rows:
+        - {service_date: '2026-10-12', day_type: sunday}
+        - {service_date: '2026-12-28', day_type: saturday}

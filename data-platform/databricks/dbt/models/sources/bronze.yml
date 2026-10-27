@@ -1,0 +1,81 @@
+version: 2
+sources:
+  - name: bronze
+    description: Immutable content records and independent capture attempts loaded by Python/Spark.
+    database: "{{ var('bronze_catalog') }}"
+    schema: "{{ var('bronze_schema') }}"
+    tables:
+      - name: capture_attempts
+        description: One row per audit attempt; repeated content hashes remain distinct observations.
+        columns:
+          - name: attempt_id
+            data_tests: [not_null, unique]
+          - name: audit_ref
+            data_tests: [not_null, unique]
+          - name: record_sha256
+            data_tests: [not_null]
+      - name: vehicle_positions
+        description: One entity per immutable RT payload; preserves missing values and raw entity JSON.
+        data_tests:
+          - unique_key:
+              arguments:
+                columns: [payload_sha256, entity_index]
+        columns:
+          - name: payload_sha256
+            data_tests: [not_null]
+          - name: entity_index
+            data_tests: [not_null]
+          - name: raw_entity_json
+            data_tests: [not_null]
+      - name: trip_updates
+        description: >-
+          One row per stop time update per immutable Trip Updates payload, with trip-level
+          fields repeated; a trip without stop updates keeps one row with a null update_index.
+        data_tests:
+          - unique_key:
+              arguments:
+                columns: [payload_sha256, entity_index, update_index]
+        columns:
+          - name: payload_sha256
+            data_tests: [not_null]
+          - name: entity_index
+            data_tests: [not_null]
+          - name: has_trip_update
+            data_tests: [not_null]
+          - name: raw_trip_json
+            data_tests: [not_null]
+      - name: routes
+        description: One route per Static ZIP content version, independent of capture frequency.
+        data_tests:
+          - unique_key:
+              arguments:
+                columns: [static_payload_sha256, route_id]
+        columns:
+          - name: static_payload_sha256
+            data_tests: [not_null]
+          - name: route_id
+            data_tests: [not_null]
+      - name: calendar
+        description: One calendar.txt service per Static ZIP content version; day flags and dates as published.
+        data_tests:
+          - unique_key:
+              arguments:
+                columns: [static_payload_sha256, service_id]
+        columns:
+          - name: static_payload_sha256
+            data_tests: [not_null]
+          - name: service_id
+            data_tests: [not_null]
+      - name: calendar_dates
+        description: One calendar_dates.txt exception per Static ZIP content version, service and date.
+        data_tests:
+          - unique_key:
+              arguments:
+                columns: [static_payload_sha256, service_id, date]
+        columns:
+          - name: static_payload_sha256
+            data_tests: [not_null]
+          - name: service_id
+            data_tests: [not_null]
+          - name: date
+            data_tests: [not_null]

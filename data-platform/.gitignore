@@ -1,0 +1,41 @@
+# Python virtual environment
+.venv/
+
+# Secrets and local configuration
+.env
+.env.*
+!.env.example
+
+# Runtime data and generated artifacts
+data/
+artifacts/
+logs/
+
+# Python-generated files
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Operating system and editor files
+.DS_Store
+.idea/
+.vscode/
+
+# Terraform local metadata and state must not enter Git
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+*.tfvars
+*.tfvars.json
+crash.log
+crash.*.log
+
+# Databricks deployment state and dbt runtime artifacts
+.databricks/
+databricks/dbt/target/
+databricks/dbt/dbt_packages/
+databricks/dbt/.user.yml

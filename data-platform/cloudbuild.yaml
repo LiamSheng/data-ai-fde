@@ -1,0 +1,93 @@
+# Checks/build only: no deployment, Terraform apply, or feed-secret access.
+# Before execution, configure a dedicated build identity and supply both inputs.
+# Git triggers must map _SOURCE_COMMIT to the triggering commit SHA.
+substitutions:
+  _SOURCE_COMMIT: unconfigured
+  _BUILD_SERVICE_ACCOUNT: unconfigured
+  _REGION: northamerica-northeast1
+  _REPOSITORY: transit-realtime
+
+serviceAccount: '${_BUILD_SERVICE_ACCOUNT}'
+options:
+  logging: CLOUD_LOGGING_ONLY
+timeout: 1200s
+
+steps:
+  - id: validate-inputs
+    name: python:3.12-slim-bookworm
+    entrypoint: python
+    env:
+      - 'SOURCE_COMMIT=${_SOURCE_COMMIT}'
+      - 'BUILD_SERVICE_ACCOUNT=${_BUILD_SERVICE_ACCOUNT}'
+    args:
+      - -c
+      - |
+        import os
+        import re
+        commit = os.environ['SOURCE_COMMIT']
+        identity = os.environ['BUILD_SERVICE_ACCOUNT']
+        if not re.fullmatch(r'[0-9a-f]{40}', commit):
+            raise SystemExit('A full source commit SHA is required')
+        if not re.fullmatch(
+            r'projects/[^/]+/serviceAccounts/[^@/]+@[^/]+\.iam\.gserviceaccount\.com',
+            identity,
+        ):
+            raise SystemExit('A dedicated build service account is required')
+        print('Build inputs validated')
+
+  - id: build-check-image
+    name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - --platform=linux/amd64
+      - --target=checks
+      - -t
+      - 'transit-realtime-checks:${BUILD_ID}'
+      - .
+
+  - id: offline-checks
+    name: gcr.io/cloud-builders/docker
+    args:
+      - run
+      - --rm
+      - --network=none
+      - 'transit-realtime-checks:${BUILD_ID}'
+
+  - id: build-runtime-image
+    name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - --platform=linux/amd64
+      - --target=runtime
+      - --build-arg
+      - 'SOURCE_COMMIT=${_SOURCE_COMMIT}'
+      - -t
+      - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPOSITORY}/collector:${_SOURCE_COMMIT}-${BUILD_ID}'
+      - .
+
+  - id: runtime-import-smoke
+    name: gcr.io/cloud-builders/docker
+    args:
+      - run
+      - --rm
+      - --network=none
+      - --entrypoint=/app/.venv/bin/python
+      - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPOSITORY}/collector:${_SOURCE_COMMIT}-${BUILD_ID}'
+      - -c
+      - |
+        import importlib.util
+        import os
+        from pathlib import Path
+        from transit_realtime_pipeline import poller
+        assert callable(poller.main)
+        assert os.getuid() != 0
+        assert importlib.util.find_spec('pytest') is None
+        assert importlib.util.find_spec('ruff') is None
+        assert not Path('/app/tests').exists()
+        assert not Path('/app/src').exists()
+        assert not Path('/usr/local/bin/uv').exists()
+        print('Runtime import smoke passed; no live feed was requested')
+
+# Cloud Build pushes only after every preceding step succeeds.
+images:
+  - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPOSITORY}/collector:${_SOURCE_COMMIT}-${BUILD_ID}'

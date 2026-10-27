@@ -1,0 +1,15 @@
+# Deny by default. Only explicitly listed build inputs are sent to Docker.
+**
+!Dockerfile
+!.dockerignore
+!pyproject.toml
+!uv.lock
+!README.md
+!src/
+!src/transit_realtime_pipeline/
+!src/transit_realtime_pipeline/*.py
+!tests/
+!tests/test_*.py
+!scripts/
+!scripts/check_ci.py
+!scripts/verify_gcs_repeat.py

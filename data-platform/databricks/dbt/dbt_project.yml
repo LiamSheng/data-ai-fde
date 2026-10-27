@@ -1,0 +1,66 @@
+name: transit_transformations
+version: 0.1.0
+config-version: 2
+profile: transit_transformations
+require-dbt-version: [">=1.12.5", "<1.13.0"]
+model-paths: [models]
+test-paths: [tests]
+macro-paths: [macros]
+seed-paths: [seeds]
+clean-targets: [target, dbt_packages]
+flags:
+  send_anonymous_usage_stats: false
+
+vars:
+  bronze_catalog: "{{ env_var('DBT_CATALOG', 'workspace') }}"
+  bronze_schema: "{{ env_var('TRANSIT_BRONZE_SCHEMA', 'transit_dev_bronze') }}"
+  reference_static_sha256: ac5f83a35d4c79063f44cb9962d8fbdeb283788d0ff87d86c4ccf13cee22d3bc
+  verify_sample: true
+  sample_rt_attempt_id: 9a50c68781504c3cab4d71e37f61c655
+  sample_static_attempt_id: 78fa7b44a0684241af71ba99ab827972
+  sample_rt_sha256: 67736d1d4930be9446072d569ae3b8e3e9889ceaecb1062a425dc595f71e0192
+  # Delay sample rules (CONTEXT.md, ADR 0001); tune once real distributions are seen.
+  delay_sample_max_lead_seconds: 300
+  # A predicted arrival before the feed timestamp is past or stale (KAN-19);
+  # negative_lead_share_warn reports how many next stops this rule drops.
+  delay_sample_min_lead_seconds: 0
+  negative_lead_share_warn: 0.01
+  late_threshold_seconds: 300
+  suspect_delay_limit_seconds: 3600
+  # Drift guard: in local 2026-10-05 snapshots 15-16% of trips were seen at their
+  # origin (stop_sequence 1) before departing. A renumbering (e.g. sequences starting
+  # at 10) drops this to 0; 3% leaves room for quiet late-night service dates.
+  origin_observed_trip_share_floor: 0.03
+  # One daytime snapshot already shows ~770 distinct trips; an after-midnight tail
+  # shows far fewer, so smaller service dates are skipped rather than misjudged.
+  origin_drift_min_trips: 500
+  # Share of samples without a Route display name (unmatched or missing route_id);
+  # about 0.1% against the latest Static version (KAN-12).
+  route_unmatched_share_warn: 0.01
+  route_unmatched_share_error: 0.05
+  # Sufficient evidence (CONTEXT.md): route_delay_summary reports percentiles and the
+  # late share only for at least this many distinct trips across this many service
+  # dates. Defaults of the function's min_trips / min_service_dates parameters.
+  sufficient_evidence_min_trips: 10
+  sufficient_evidence_min_service_dates: 2
+
+seeds:
+  transit_transformations:
+    +schema: silver
+    route_aliases:
+      +column_types:
+        alias: string
+        route_id: string
+
+models:
+  transit_transformations:
+    +persist_docs:
+      relation: true
+      columns: true
+    silver:
+      +schema: silver
+      +materialized: view
+    gold:
+      +schema: gold
+      +materialized: table
+      +file_format: delta

@@ -1,0 +1,14 @@
+transit_transformations:
+  target: "{{ env_var('DBT_TARGET', 'dev') }}"
+  outputs:
+    dev:
+      type: databricks
+      host: "{{ env_var('DATABRICKS_HOST', '8259562609571268.8.gcp.databricks.com') }}"
+      http_path: "{{ env_var('DATABRICKS_HTTP_PATH', '/sql/1.0/warehouses/7c54787fedb2e2ac') }}"
+      catalog: "{{ env_var('DBT_CATALOG', 'workspace') }}"
+      schema: "{{ env_var('DBT_SCHEMA', 'transit_dev') }}"
+      auth_type: oauth
+      threads: 2
+      connect_retries: 0
+      session_properties:
+        spark.sql.session.timeZone: UTC

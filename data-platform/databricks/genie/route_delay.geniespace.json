@@ -1,0 +1,383 @@
+{
+  "version": 2,
+  "config": {
+    "sample_questions": [
+      {
+        "id": "0df7c3fa58d72cb9c0a7cc78d6beafb6",
+        "question": [
+          "99 路工作日下午 3 点到 6 点一般晚多少？"
+        ]
+      },
+      {
+        "id": "65ff6327e4e2f1957a1124c1b546ca64",
+        "question": [
+          "99 路下午 3 点到 6 点，工作日和周六哪个更晚？"
+        ]
+      },
+      {
+        "id": "b650da3275b0a909cc12a38629ced202",
+        "question": [
+          "天车早高峰晚点多吗？"
+        ]
+      }
+    ]
+  },
+  "data_sources": {
+    "tables": [
+      {
+        "identifier": "workspace.transit_dev_gold.fct_trip_delay_sample"
+      },
+      {
+        "identifier": "workspace.transit_dev_silver.dim_routes"
+      },
+      {
+        "identifier": "workspace.transit_dev_silver.route_aliases"
+      }
+    ]
+  },
+  "instructions": {
+    "text_instructions": [
+      {
+        "id": "5b9eb686b0ff6130d48e3092161ea9cb",
+        "content": [
+          "You answer how late TransLink routes run, from sampled GTFS-Realtime Trip Updates.\n",
+          "\n",
+          "## How to answer delay questions\n",
+          "\n",
+          "- Every median, p90 or late share comes from one call of the function\n",
+          "  `route_delay_summary(route, day_type, start_hour, end_hour)`, written as\n",
+          "  `SELECT * FROM <function>(...)`. Never aggregate `fct_trip_delay_sample` yourself:\n",
+          "  the function applies the Sufficient evidence rule and leaves suspect delays out of\n",
+          "  the percentiles.\n",
+          "- Pass only the route's name or alias, as the user wrote it, without words like\n",
+          "  \"route\", \"bus\", \"the\" or \"路\": \"99 路\" and \"the 99\" are '99'; \"B-Line\", \"Expo Line\"\n",
+          "  and \"天车\" stay as they are. The function resolves names and aliases itself; never\n",
+          "  look up a `route_id`.\n",
+          "- Hours are America/Vancouver observation hours; the window includes `start_hour` and\n",
+          "  excludes `end_hour`. \"3 to 6 pm\" is (15, 18); \"8 am\" alone is (8, 9).\n",
+          "- `day_type` is `weekday`, `saturday` or `sunday`. Holidays already count as the day\n",
+          "  type their service runs (usually sunday), so never adjust for them.\n",
+          "- AM peak (早高峰) is weekday (6, 9); PM peak (晚高峰) is weekday (15, 18). A peak\n",
+          "  question without a day type means weekday.\n",
+          "- To compare two routes, day types or windows, call the function once for each and\n",
+          "  combine the calls with `UNION ALL`.\n",
+          "\n",
+          "## How to report\n",
+          "\n",
+          "- If `route_display_name` is null, say the route was not found and ask which route\n",
+          "  the user means. Do not guess another route.\n",
+          "- If `sample_count` is 0, say there is no real-time data for that route and window;\n",
+          "  SkyTrain, SeaBus, West Coast Express and HandyDART are not in TransLink's Trip\n",
+          "  Updates feed at all. Do not call this \"not enough evidence yet\".\n",
+          "- Otherwise, if `is_sufficient` is false, say there is not enough evidence yet and\n",
+          "  give the trip count and service dates; report no delay figures.\n",
+          "- Otherwise give the median and p90 in minutes (seconds / 60, one decimal; negative is\n",
+          "  early) and `late_sample_share` (a fraction) as a percentage, where late means at\n",
+          "  least 5 minutes.\n",
+          "- Always state the sample count, trip count and the service date range behind the\n",
+          "  numbers.\n",
+          "- The late share is the share of in-service vehicle moments that were late, never the\n",
+          "  share of trips that were late. Say \"running late\" or \"of observed moments\", not\n",
+          "  \"trips were late\" or \"on-time rate\".\n",
+          "- Answer in the user's language.\n",
+          "\n",
+          "## What this space cannot answer\n",
+          "\n",
+          "- Rankings across routes (\"which route is the latest\"), forecasts for a future trip,\n",
+          "  single stops, and vehicle counts. Say so plainly, and suggest a question it can\n",
+          "  answer, such as one route on one day type and hour window.\n"
+        ]
+      }
+    ],
+    "sql_functions": [
+      {
+        "id": "fe8b85b0c2df16ce301c7b74da643b79",
+        "identifier": "workspace.transit_dev_gold.route_delay_summary"
+      }
+    ]
+  },
+  "benchmarks": {
+    "questions": [
+      {
+        "id": "040f463beaca0382053840d7c41ba17c",
+        "question": [
+          "How late is the 99 on weekdays between 3 and 6 pm?"
+        ],
+        "answer": [
+          {
+            "format": "SQL",
+            "content": [
+              "SELECT * FROM workspace.transit_dev_gold.route_delay_summary('99', 'weekday', 15, 18)"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "2d115f6e909f9705287d3c5ec2b345b6",
+        "question": [
+          "What is the PM peak delay on route 25?"
+        ],
+        "answer": [
+          {
+            "format": "SQL",
+            "content": [
+              "SELECT * FROM workspace.transit_dev_gold.route_delay_summary('25', 'weekday', 15, 18)"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "3a30c91364bedc9868ff894d376605b7",
+        "question": [
+          "What is the Expo Line delay on Saturdays from 10 am to noon?"
+        ],
+        "answer": [
+          {
+            "format": "SQL",
+            "content": [
+              "SELECT * FROM workspace.transit_dev_gold.route_delay_summary('Expo Line', 'saturday', 10, 12)"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "43c98d39667c3d0dbbae7b6a7174cb55",
+        "question": [
+          "99 路下午 3 点到 6 点，工作日和周六哪个更晚？"
+        ],
+        "answer": [
+          {
+            "format": "SQL",
+            "content": [
+              "SELECT * FROM workspace.transit_dev_gold.route_delay_summary('99', 'weekday', 15, 18) UNION ALL SELECT * FROM workspace.transit_dev_gold.route_delay_summary('99', 'saturday', 15, 18)"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "4797c6459549dcfea8c0b204ea27ee58",
+        "question": [
+          "99 路工作日下午 3 点到 6 点一般晚多少？"
+        ],
+        "answer": [
+          {
+            "format": "SQL",
+            "content": [
+              "SELECT * FROM workspace.transit_dev_gold.route_delay_summary('99', 'weekday', 15, 18)"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "50788af15422494c38a64d824e0962d7",
+        "question": [
+          "Which is more punctual in the AM peak, the 99 or the R4?"
+        ],
+        "answer": [
+          {
+            "format": "SQL",
+            "content": [
+              "SELECT * FROM workspace.transit_dev_gold.route_delay_summary('99', 'weekday', 6, 9) UNION ALL SELECT * FROM workspace.transit_dev_gold.route_delay_summary('R4', 'weekday', 6, 9)"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "60012d5fce6ac68cc81aa28d8c42ea41",
+        "question": [
+          "How delayed is route 99 during the 8 am hour on weekdays?"
+        ],
+        "answer": [
+          {
+            "format": "SQL",
+            "content": [
+              "SELECT * FROM workspace.transit_dev_gold.route_delay_summary('99', 'weekday', 8, 9)"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "6a0294b418cd8b6f71a279d6e9b0c6c9",
+        "question": [
+          "B-Line 晚高峰准时吗？"
+        ],
+        "answer": [
+          {
+            "format": "SQL",
+            "content": [
+              "SELECT * FROM workspace.transit_dev_gold.route_delay_summary('B-Line', 'weekday', 15, 18)"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "6e6bb7711b675a5266039e5561f7a6e8",
+        "question": [
+          "99 路工作日早上 8 点那一个小时晚点情况怎么样？"
+        ],
+        "answer": [
+          {
+            "format": "SQL",
+            "content": [
+              "SELECT * FROM workspace.transit_dev_gold.route_delay_summary('99', 'weekday', 8, 9)"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "7160c8609312e9e80bc60e4e318a9912",
+        "question": [
+          "How late is the N22 on weekdays between 2 and 3 am?"
+        ],
+        "answer": [
+          {
+            "format": "SQL",
+            "content": [
+              "SELECT * FROM workspace.transit_dev_gold.route_delay_summary('N22', 'weekday', 2, 3)"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "7c1c18600ff1688d249977a7e91dbb5d",
+        "question": [
+          "Expo Line 周六上午 10 点到中午延误多少？"
+        ],
+        "answer": [
+          {
+            "format": "SQL",
+            "content": [
+              "SELECT * FROM workspace.transit_dev_gold.route_delay_summary('Expo Line', 'saturday', 10, 12)"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "8cacc8c62aa4b5db6842cf0d2707ed35",
+        "question": [
+          "N22 工作日凌晨 2 点到 3 点晚多少？"
+        ],
+        "answer": [
+          {
+            "format": "SQL",
+            "content": [
+              "SELECT * FROM workspace.transit_dev_gold.route_delay_summary('N22', 'weekday', 2, 3)"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "8e213a6db8a3fbd27468b024a1cb6d3e",
+        "question": [
+          "25 路晚高峰一般晚几分钟？"
+        ],
+        "answer": [
+          {
+            "format": "SQL",
+            "content": [
+              "SELECT * FROM workspace.transit_dev_gold.route_delay_summary('25', 'weekday', 15, 18)"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "a0fd85e83fc6ec1ce32bd171a24dfc0b",
+        "question": [
+          "Is the 99 later on weekdays or Saturdays between 3 and 6 pm?"
+        ],
+        "answer": [
+          {
+            "format": "SQL",
+            "content": [
+              "SELECT * FROM workspace.transit_dev_gold.route_delay_summary('99', 'weekday', 15, 18) UNION ALL SELECT * FROM workspace.transit_dev_gold.route_delay_summary('99', 'saturday', 15, 18)"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "b184693bbd89f4314f447b87718204b0",
+        "question": [
+          "R4 周日晚上 7 点到 9 点晚多少？"
+        ],
+        "answer": [
+          {
+            "format": "SQL",
+            "content": [
+              "SELECT * FROM workspace.transit_dev_gold.route_delay_summary('R4', 'sunday', 19, 21)"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "bb16f7e16e6c9873dbcbad195e651119",
+        "question": [
+          "Is the B-Line on time in the PM peak?"
+        ],
+        "answer": [
+          {
+            "format": "SQL",
+            "content": [
+              "SELECT * FROM workspace.transit_dev_gold.route_delay_summary('B-Line', 'weekday', 15, 18)"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "bef406cb895aadf23c85e10320bf89d7",
+        "question": [
+          "早高峰 99 路和 R4 哪个更准时？"
+        ],
+        "answer": [
+          {
+            "format": "SQL",
+            "content": [
+              "SELECT * FROM workspace.transit_dev_gold.route_delay_summary('99', 'weekday', 6, 9) UNION ALL SELECT * FROM workspace.transit_dev_gold.route_delay_summary('R4', 'weekday', 6, 9)"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "c7c5b01109ad1153b1b9fcad2bdc4316",
+        "question": [
+          "How late does the R4 run on Sunday evenings from 7 to 9 pm?"
+        ],
+        "answer": [
+          {
+            "format": "SQL",
+            "content": [
+              "SELECT * FROM workspace.transit_dev_gold.route_delay_summary('R4', 'sunday', 19, 21)"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "cb9e8c6390bf3a96dfe349a94fd5e9ea",
+        "question": [
+          "How delayed is SkyTrain in the morning peak?"
+        ],
+        "answer": [
+          {
+            "format": "SQL",
+            "content": [
+              "SELECT * FROM workspace.transit_dev_gold.route_delay_summary('天车', 'weekday', 6, 9)"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "dfdf49474790766e123a1e1d128383ea",
+        "question": [
+          "天车早高峰晚点多吗？"
+        ],
+        "answer": [
+          {
+            "format": "SQL",
+            "content": [
+              "SELECT * FROM workspace.transit_dev_gold.route_delay_summary('天车', 'weekday', 6, 9)"
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

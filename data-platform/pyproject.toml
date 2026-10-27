@@ -1,0 +1,33 @@
+[project]
+name = "transit-realtime-pipeline"
+version = "0.1.0"
+description = "A local-first pipeline for capturing, validating, and analyzing public transit GTFS data."
+readme = "README.md"
+authors = [
+    { name = "Linzi Sheng" }
+]
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "google-cloud-storage>=3.17.0",
+    "gtfs-realtime-bindings>=3.0.0",
+    "httpx>=0.28.1",
+]
+
+[build-system]
+requires = ["uv_build>=0.12.12,<0.13.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "duckdb>=1.5.6",
+    "pytest>=9.1.1",
+    "pytz>=2026.5",
+    "pyyaml>=6.0.3",
+    "ruff>=0.16.8",
+    "sqlglot==30.22.0",
+]
+
+[tool.pytest.ini_options]
+# databricks/ingestion/tests are unittest modules run by databricks/check_local.py;
+# collecting them here clashes with tests/test_records.py.
+testpaths = ["tests"]

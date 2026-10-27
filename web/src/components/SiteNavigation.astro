@@ -1,0 +1,14 @@
+---
+import { navigation } from '../config/navigation';
+
+const pathname = Astro.url.pathname;
+---
+
+<nav class="site-navigation" aria-label="Main navigation">
+  {
+    navigation.map(({ id, label, href }) => {
+      const active = id === 'map' ? pathname === href : pathname.startsWith(href);
+      return <a href={href} aria-current={active ? 'page' : undefined}>{label}</a>;
+    })
+  }
+</nav>

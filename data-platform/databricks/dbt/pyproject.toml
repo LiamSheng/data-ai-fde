@@ -1,0 +1,12 @@
+[project]
+name = "transit-transformations"
+version = "0.1.0"
+description = "Databricks SQL transformations for captured transit snapshots."
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "dbt-core==1.12.5",
+    "dbt-databricks==1.12.7",
+]
+
+[tool.uv]
+package = false

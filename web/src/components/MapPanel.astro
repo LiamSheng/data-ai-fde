@@ -1,0 +1,35 @@
+---
+// With a key the client starts loading at once; render that state so the error art never flashes first.
+const hasKey = Boolean(import.meta.env.PUBLIC_GOOGLE_MAPS_API_KEY?.trim());
+---
+
+<section id="map-panel" class="map-panel" data-map-state={hasKey ? 'loading' : 'waiting'} aria-label="Map">
+  <div class="map-canvas" data-map-canvas></div>
+  <div class="map-loading" aria-hidden="true"><span class="map-pulse"></span></div>
+  <div class="map-error" role="status">
+    <svg class="map-error-art" viewBox="0 0 120 80" width="120" height="80" aria-hidden="true">
+      <g class="map-error-links">
+        <line x1="20" y1="40" x2="50" y2="18" />
+        <line x1="20" y1="40" x2="50" y2="62" />
+        <line x1="50" y1="18" x2="50" y2="62" />
+        <line class="map-error-broken" x1="50" y1="18" x2="80" y2="34" />
+      </g>
+      <g class="map-error-nodes">
+        <circle cx="20" cy="40" r="5" />
+        <circle cx="50" cy="18" r="5" />
+        <circle cx="50" cy="62" r="5" />
+      </g>
+      <g class="map-error-loose">
+        <circle cx="96" cy="44" r="6" />
+      </g>
+    </svg>
+    <p>The map couldn't load right now.</p>
+  </div>
+</section>
+
+<script>
+  import { initializeMapPanel } from '../lib/map-client';
+
+  const root = document.getElementById('map-panel');
+  if (root) initializeMapPanel(root, import.meta.env.PUBLIC_GOOGLE_MAPS_API_KEY);
+</script>

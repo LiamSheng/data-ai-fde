@@ -1,0 +1,43 @@
+---
+import SiteNavigation from './SiteNavigation.astro';
+import { SITE_NAME } from '../config/site';
+---
+
+<div class="site-header">
+  <a class="site-brand" href="/">
+    <svg class="site-logo" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true">
+      <g class="site-logo-links">
+        <line x1="5" y1="6" x2="12" y2="12" />
+        <line x1="5" y1="18" x2="12" y2="12" />
+        <line x1="12" y1="12" x2="19" y2="6" />
+        <line x1="12" y1="12" x2="19" y2="18" />
+        <line x1="5" y1="6" x2="5" y2="18" />
+      </g>
+      <circle cx="5" cy="6" r="2.25" />
+      <circle cx="5" cy="18" r="2.25" />
+      <circle cx="12" cy="12" r="3" />
+      <circle cx="19" cy="6" r="2.25" />
+      <circle cx="19" cy="18" r="2.25" />
+    </svg>
+    <span>{SITE_NAME}</span>
+  </a>
+  <SiteNavigation />
+</div>
+
+<script>
+  // Hide the header while scrolling down; bring it back on any upward scroll or at the top.
+  const header = document.querySelector<HTMLElement>('header.header');
+  if (header) {
+    let lastY = window.scrollY;
+    window.addEventListener(
+      'scroll',
+      () => {
+        const y = window.scrollY;
+        const hide = y > lastY && y > header.offsetHeight;
+        header.toggleAttribute('data-hidden', hide);
+        lastY = y;
+      },
+      { passive: true },
+    );
+  }
+</script>

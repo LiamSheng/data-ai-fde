@@ -1,0 +1,120 @@
+# Cases for the route_delay_summary SQL function (macros/route_delay_summary.sql),
+# run on DuckDB by `duckdb_check.py function`. Like dbt unit tests, `given` replaces
+# ref() inputs with fixture rows; `args` are SQL literals for the function's
+# parameters, and parameters left out take their DEFAULT from the compiled DDL.
+#
+# Fixture: route 99 on weekdays, 12 samples between 15:00 and 18:00. Eleven are
+# ordinary (sorted 0 0 0 60 60 60 60 60 240 300 300) and one is a suspect 4000 s
+# delay; 11 distinct trips (service date + trip) over two service dates.
+# percentile_approx returns a sample value on Databricks, while DuckDB's
+# approx_quantile interpolates; equal values around each tested rank (60 at the
+# median, 300 at p90) make both engines agree.
+fixtures:
+  routes: &routes
+    - {route_id: '6641', route_display_name: '99'}
+    - {route_id: '6642', route_display_name: '100'}
+    - {route_id: '13686', route_display_name: Canada Line}
+    - {route_id: '30053', route_display_name: Expo Line}
+  aliases: &aliases
+    - {alias: B-Line, route_id: '6641'}
+    - {alias: 天车, route_id: '13686'}
+    - {alias: 天车, route_id: '30053'}
+  samples: &samples
+    - {payload_sha256: a1, entity_index: 0, route_id: '6641', service_date: '2026-10-13', day_type: weekday, observation_hour: 15, trip_id: T1, current_delay_seconds: 0, is_late: false, is_suspect_delay: false}
+    - {payload_sha256: a1, entity_index: 1, route_id: '6641', service_date: '2026-10-13', day_type: weekday, observation_hour: 15, trip_id: T2, current_delay_seconds: 0, is_late: false, is_suspect_delay: false}
+    - {payload_sha256: a1, entity_index: 2, route_id: '6641', service_date: '2026-10-13', day_type: weekday, observation_hour: 15, trip_id: T3, current_delay_seconds: 0, is_late: false, is_suspect_delay: false}
+    - {payload_sha256: a2, entity_index: 0, route_id: '6641', service_date: '2026-10-13', day_type: weekday, observation_hour: 16, trip_id: T4, current_delay_seconds: 60, is_late: false, is_suspect_delay: false}
+    - {payload_sha256: a2, entity_index: 1, route_id: '6641', service_date: '2026-10-13', day_type: weekday, observation_hour: 16, trip_id: T5, current_delay_seconds: 60, is_late: false, is_suspect_delay: false}
+    - {payload_sha256: a2, entity_index: 2, route_id: '6641', service_date: '2026-10-13', day_type: weekday, observation_hour: 16, trip_id: T6, current_delay_seconds: 60, is_late: false, is_suspect_delay: false}
+    - {payload_sha256: b1, entity_index: 0, route_id: '6641', service_date: '2026-10-14', day_type: weekday, observation_hour: 17, trip_id: T1, current_delay_seconds: 60, is_late: false, is_suspect_delay: false}
+    - {payload_sha256: b1, entity_index: 1, route_id: '6641', service_date: '2026-10-14', day_type: weekday, observation_hour: 17, trip_id: T2, current_delay_seconds: 60, is_late: false, is_suspect_delay: false}
+    - {payload_sha256: b1, entity_index: 2, route_id: '6641', service_date: '2026-10-14', day_type: weekday, observation_hour: 17, trip_id: T3, current_delay_seconds: 240, is_late: false, is_suspect_delay: false}
+    - {payload_sha256: b1, entity_index: 3, route_id: '6641', service_date: '2026-10-14', day_type: weekday, observation_hour: 17, trip_id: T4, current_delay_seconds: 300, is_late: true, is_suspect_delay: false}
+    - {payload_sha256: b1, entity_index: 4, route_id: '6641', service_date: '2026-10-14', day_type: weekday, observation_hour: 17, trip_id: T5, current_delay_seconds: 300, is_late: true, is_suspect_delay: false}
+    # Same trip seen again: one more sample, not one more trip.
+    - {payload_sha256: b2, entity_index: 0, route_id: '6641', service_date: '2026-10-14', day_type: weekday, observation_hour: 17, trip_id: T1, current_delay_seconds: 4000, is_late: true, is_suspect_delay: true}
+    # Outside the question: end hour is exclusive, other hour, day type and route.
+    - {payload_sha256: b3, entity_index: 0, route_id: '6641', service_date: '2026-10-14', day_type: weekday, observation_hour: 18, trip_id: T9, current_delay_seconds: 900, is_late: true, is_suspect_delay: false}
+    - {payload_sha256: a0, entity_index: 0, route_id: '6641', service_date: '2026-10-13', day_type: weekday, observation_hour: 14, trip_id: T8, current_delay_seconds: 900, is_late: true, is_suspect_delay: false}
+    - {payload_sha256: s1, entity_index: 0, route_id: '6641', service_date: '2026-10-17', day_type: saturday, observation_hour: 16, trip_id: S1, current_delay_seconds: 900, is_late: true, is_suspect_delay: false}
+    - {payload_sha256: a2, entity_index: 3, route_id: '6642', service_date: '2026-10-13', day_type: weekday, observation_hour: 16, trip_id: X1, current_delay_seconds: 900, is_late: true, is_suspect_delay: false}
+    # SkyTrain, reached through the 天车 alias or a line's long name.
+    - {payload_sha256: a2, entity_index: 4, route_id: '13686', service_date: '2026-10-13', day_type: weekday, observation_hour: 16, trip_id: C1, current_delay_seconds: 30, is_late: false, is_suspect_delay: false}
+    - {payload_sha256: a2, entity_index: 5, route_id: '30053', service_date: '2026-10-13', day_type: weekday, observation_hour: 16, trip_id: E1, current_delay_seconds: 90, is_late: false, is_suspect_delay: false}
+  given: &given
+    - {input: "ref('dim_routes')", rows: *routes}
+    - {input: "ref('route_aliases')", rows: *aliases}
+    - {input: "ref('fct_trip_delay_sample')", rows: *samples}
+  full_99_summary: &full_99_summary
+    route_display_name: '99'
+    day_type: weekday
+    start_hour: 15
+    end_hour: 18
+    sample_count: 12
+    trip_count: 11
+    service_date_count: 2
+    first_service_date: '2026-10-13'
+    last_service_date: '2026-10-14'
+    is_sufficient: true
+    # Over the 11 ordinary samples; the suspect delay is counted but not ranked.
+    median_delay_seconds: 60
+    p90_delay_seconds: 300
+    # 3 of 12 samples, the suspect one included.
+    late_sample_share: 0.25
+
+cases:
+  - name: sufficient_evidence_returns_the_full_summary
+    given: *given
+    args: {route: "'99'", day_type: "'weekday'", start_hour: 15, end_hour: 18}
+    expect: *full_99_summary
+  - name: alias_and_unpadded_input_resolve_to_the_display_name
+    given: *given
+    args: {route: "' b-line '", day_type: "'Weekday'", start_hour: 15, end_hour: 18}
+    expect: *full_99_summary
+  - name: leading_zeros_in_the_route_are_ignored
+    given: *given
+    args: {route: "'099'", day_type: "'weekday'", start_hour: 15, end_hour: 18}
+    expect: *full_99_summary
+  - name: one_service_date_is_not_sufficient
+    given: *given
+    args: {route: "'99'", day_type: "'weekday'", start_hour: 17, end_hour: 18}
+    expect:
+      route_display_name: '99'
+      sample_count: 6
+      trip_count: 5
+      service_date_count: 1
+      is_sufficient: false
+      median_delay_seconds: null
+      p90_delay_seconds: null
+      late_sample_share: null
+  - name: trip_threshold_is_a_parameter
+    given: *given
+    args: {route: "'99'", day_type: "'weekday'", start_hour: 15, end_hour: 18, min_trips: 12}
+    expect:
+      trip_count: 11
+      is_sufficient: false
+      median_delay_seconds: null
+  - name: group_alias_covers_every_mapped_route
+    given: *given
+    args: {route: "'天车'", day_type: "'weekday'", start_hour: 16, end_hour: 17}
+    expect:
+      route_display_name: Canada Line, Expo Line
+      sample_count: 2
+      trip_count: 2
+      is_sufficient: false
+  - name: long_name_reaches_one_skytrain_line
+    given: *given
+    args: {route: "'expo line'", day_type: "'weekday'", start_hour: 16, end_hour: 17}
+    expect:
+      route_display_name: Expo Line
+      sample_count: 1
+  - name: unknown_route_returns_one_empty_row
+    given: *given
+    args: {route: "'nowhere'", day_type: "'weekday'", start_hour: 0, end_hour: 24}
+    expect:
+      route_display_name: null
+      sample_count: 0
+      trip_count: 0
+      service_date_count: 0
+      is_sufficient: false
+      median_delay_seconds: null

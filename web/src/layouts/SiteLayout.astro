@@ -1,0 +1,32 @@
+---
+import StarlightPage from '@astrojs/starlight/components/StarlightPage.astro';
+import { SITE_NAME } from '../config/site';
+
+interface Props {
+  title: string;
+  description: string;
+  documentLayout?: boolean;
+}
+
+const { title, description, documentLayout = false } = Astro.props;
+// Starlight always renders "<title> | <site>"; a page named after the site gets the bare name.
+const head = title === SITE_NAME ? [{ tag: 'title' as const, content: SITE_NAME }] : [];
+---
+
+<StarlightPage
+  lang="en"
+  hasSidebar={documentLayout}
+  frontmatter={{
+    title,
+    description,
+    head,
+    template: documentLayout ? 'doc' : 'splash',
+    tableOfContents: false,
+    editUrl: false,
+    lastUpdated: false,
+    prev: false,
+    next: false,
+  }}
+>
+  <slot />
+</StarlightPage>

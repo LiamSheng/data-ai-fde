@@ -1,0 +1,51 @@
+bundle:
+  name: transit_realtime_pipeline
+  deployment:
+    lock:
+      enabled: true
+
+include:
+  - resources/*.yml
+
+variables:
+  catalog:
+    default: workspace
+  schema_prefix:
+    default: transit_dev
+  warehouse_id:
+    description: Existing SQL warehouse; deployment does not create or resize it.
+    default: 7c54787fedb2e2ac
+  rt_audit_ref:
+    default: audit/capture_attempts/9a50c68781504c3cab4d71e37f61c655.json
+  tu_end_date:
+    description: Last Vancouver date of Trip Updates attempts to load (YYYY-MM-DD); blank means today.
+    default: ""
+  tu_days:
+    description: Number of Vancouver days of Trip Updates attempts to load, ending on tu_end_date.
+    default: "14"
+  static_audit_ref:
+    description: Static audit of reference_static_sha256, loaded beside the latest successful Static capture.
+    default: audit/schedule_capture_attempts/78fa7b44a0684241af71ba99ab827972.json
+  reference_static_sha256:
+    description: Static version the Vehicle Positions slice joins; dim_routes uses the latest instead.
+    default: ac5f83a35d4c79063f44cb9962d8fbdeb283788d0ff87d86c4ccf13cee22d3bc
+
+workspace:
+  host: https://8259562609571268.8.gcp.databricks.com
+  root_path: /Workspace/Users/${workspace.current_user.userName}/.bundle/${bundle.name}/${bundle.target}
+
+sync:
+  exclude:
+    - check_local.py
+    - ingestion/tests/**
+    - genie/**
+    - dbt/.venv/**
+    - dbt/dev/**
+    - dbt/target/**
+    - dbt/logs/**
+    - dbt/dbt_packages/**
+
+targets:
+  dev:
+    default: true
+    mode: development

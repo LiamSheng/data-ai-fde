@@ -1,0 +1,23 @@
+version: 2
+seeds:
+  - name: route_aliases
+    description: >-
+      Names people use for a route besides its Route display name, for
+      route_delay_summary. An alias may name several routes ("天车" is every
+      SkyTrain line); the function then summarises them together. Matching ignores
+      case and surrounding spaces.
+    data_tests:
+      # route_delay_summary matches aliases ignoring case and surrounding spaces.
+      - unique_key:
+          arguments:
+            columns: ["lower(trim(alias))", route_id]
+    columns:
+      - name: alias
+        data_tests: [not_null]
+      - name: route_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_routes')
+                field: route_id

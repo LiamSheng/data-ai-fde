@@ -1,0 +1,8 @@
+---
+import ThemePageTitle from 'starlight-theme-black/overrides/PageTitle.astro';
+
+// Splash pages (the Map page) are full-surface layouts: their h1 exists for assistive tech only.
+const { title, template } = Astro.locals.starlightRoute.entry.data;
+---
+
+{template === 'splash' ? <h1 id="_top" class="sr-only">{title}</h1> : <ThemePageTitle />}

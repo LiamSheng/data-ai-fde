@@ -1,0 +1,227 @@
+:root {
+  --sl-content-width: 72rem;
+  /* The Map page's content column (Starlight's splash width); the header follows it on every page. */
+  --lab-column: 67.5rem;
+  --lab-accent: #0f8f86;
+  --lab-bg: #fff;
+  --lab-border: #d4d4d8;
+  --lab-muted: #71717a;
+  --lab-nav-text: #52525b;
+  --lab-nav-strong: #18181b;
+  --lab-nav-hover: #f4f4f5;
+  --lab-chat: #fdf1f3;
+  --lab-chat-text: #c28a96;
+  --lab-workspace-height: clamp(18rem, 60vh, 36rem);
+  color-scheme: light;
+}
+
+/* Circuit-trace texture behind every page; content surfaces stay opaque on top of it.
+   Data URIs can't read CSS variables, so the SVG repeats the --lab-accent hex. */
+body {
+  background-color: var(--lab-bg);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240' fill='none' stroke='%230f8f86' stroke-opacity='0.08' stroke-width='1.5'%3E%3Cpath d='M0 40h60l20 20h60M140 60l30-30h70M30 0v20l20 20M200 30v50l-20 20H120l-20 20v60M0 160h40l20-20h20M100 180h80l20 20v40M180 240v-20M240 140h-40l-20-20M60 240v-30l20-20h20'/%3E%3Cg fill='%230f8f86' fill-opacity='0.08' stroke='none'%3E%3Ccircle cx='140' cy='60' r='3.5'/%3E%3Ccircle cx='50' cy='40' r='3.5'/%3E%3Ccircle cx='100' cy='180' r='3.5'/%3E%3Ccircle cx='80' cy='140' r='3.5'/%3E%3Ccircle cx='200' cy='80' r='3.5'/%3E%3Ccircle cx='180' cy='120' r='3.5'/%3E%3C/g%3E%3C/svg%3E");
+  background-size: 240px 240px;
+}
+
+/* Header: a floating pill as wide as the Workspace, hidden while scrolling down. */
+header.header {
+  padding-inline-start: var(--sl-content-pad-x);
+  border-bottom: 0;
+  background: transparent;
+  transition: transform 0.25s ease;
+}
+
+header.header[data-hidden] { transform: translateY(-110%); }
+
+/* Desktop: same padding on every page (sidebar pages included) so the column never shifts. */
+@media (min-width: 50rem) {
+  :root header.header,
+  :root[data-has-sidebar] header.header {
+    padding-inline: var(--sl-content-pad-x);
+  }
+}
+
+.site-header {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 1rem;
+  width: 100%;
+  max-width: var(--lab-column);
+  min-width: 0;
+  height: 100%;
+  margin-inline: auto;
+  padding-inline: 1.25rem;
+  border: 1px solid var(--lab-border);
+  border-radius: 999px;
+  background: var(--lab-bg);
+  box-shadow: 0 6px 24px rgb(0 0 0 / 0.06), 0 1px 2px rgb(0 0 0 / 0.04);
+}
+
+.site-brand {
+  display: inline-flex;
+  align-items: center;
+  justify-self: start;
+  gap: 0.5rem;
+  color: var(--lab-accent);
+  font-size: 1.0625rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.site-logo { flex-shrink: 0; fill: var(--lab-accent); }
+.site-logo-links { stroke: var(--lab-accent); stroke-width: 1.5; stroke-linecap: round; opacity: 0.55; }
+
+.site-navigation {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.site-navigation a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2.25rem;
+  padding: 0.35rem 0.85rem;
+  border-radius: 999px;
+  color: var(--lab-nav-text);
+  font-size: 0.9375rem;
+  font-weight: 500;
+  text-decoration: none;
+}
+
+.site-navigation a:hover { background: var(--lab-nav-hover); color: var(--lab-nav-strong); }
+.site-navigation a[aria-current='page'] { color: var(--lab-nav-strong); font-weight: 650; }
+.site-navigation a:focus-visible { outline-color: var(--lab-nav-strong); }
+
+a:focus-visible,
+button:focus-visible,
+select:focus-visible {
+  outline: 2px solid var(--lab-accent);
+  outline-offset: 3px;
+}
+
+.page-intro { color: var(--sl-color-gray-2); }
+
+/* The theme zeroes content padding on wide screens; the Map page keeps its side margins. */
+:root:not([data-has-sidebar]) .content-panel { padding-inline: 0; }
+
+@media (min-width: 48rem) {
+  :root:not([data-has-sidebar]) .content-panel { padding-inline: var(--sl-content-pad-x); }
+}
+
+/* Workspace: Map panel and Chat panel, half each, inside one bordered frame. */
+.workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  height: var(--lab-workspace-height);
+  margin-block: 2rem;
+  overflow: hidden;
+  border: 1px solid var(--lab-border);
+  border-radius: 0.75rem;
+  background: var(--lab-bg);
+}
+
+.map-panel { position: relative; min-width: 0; }
+.map-canvas { width: 100%; height: 100%; }
+
+.map-loading,
+.map-error {
+  position: absolute;
+  inset: 0;
+  display: none;
+  place-items: center;
+  align-content: center;
+  gap: 1rem;
+  padding: 1.5rem;
+  text-align: center;
+}
+
+.map-panel[data-map-state='loading'] .map-loading,
+.map-panel[data-map-state='waiting'] .map-error,
+.map-panel[data-map-state='failed'] .map-error { display: grid; }
+
+.map-panel[data-map-state='waiting'] .map-canvas,
+.map-panel[data-map-state='failed'] .map-canvas { visibility: hidden; }
+
+.map-pulse {
+  width: 0.75rem;
+  height: 0.75rem;
+  border-radius: 50%;
+  background: var(--lab-accent);
+  animation: map-pulse 1.4s ease-out infinite;
+}
+
+.map-error p { margin: 0; color: var(--lab-muted); font-size: 0.9375rem; }
+.map-error-art { overflow: visible; }
+.map-error-links { stroke: var(--lab-accent); stroke-width: 2; stroke-linecap: round; opacity: 0.45; }
+.map-error-nodes,
+.map-error-loose { fill: var(--lab-accent); }
+.map-error-broken { stroke-dasharray: 3 5; animation: map-flicker 1.6s steps(2, jump-none) infinite; }
+.map-error-loose { transform-origin: 80px 34px; animation: map-wobble 2.4s ease-in-out infinite; }
+
+.chat-panel {
+  display: grid;
+  place-items: center;
+  border-inline-start: 1px solid var(--lab-border);
+  background: var(--lab-chat);
+}
+
+.chat-panel p { margin: 0; color: var(--lab-chat-text); font-size: 0.875rem; letter-spacing: 0.02em; }
+
+@keyframes map-pulse {
+  0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--lab-accent) 45%, transparent); }
+  100% { box-shadow: 0 0 0 1rem transparent; }
+}
+
+@keyframes map-flicker {
+  0% { opacity: 1; }
+  100% { opacity: 0.1; }
+}
+
+@keyframes map-wobble {
+  0%, 100% { transform: rotate(-8deg); }
+  50% { transform: rotate(10deg) translateX(3px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .map-pulse,
+  .map-error-broken,
+  .map-error-loose { animation: none; }
+  header.header { transition: none; }
+}
+
+/* Blog reading area stays opaque above the circuit texture. */
+[data-has-sidebar] .main-pane {
+  min-height: calc(100vh - var(--sl-nav-height));
+  background: var(--lab-bg);
+}
+
+.empty-state {
+  margin-block: 2rem;
+  padding: 1.5rem;
+  border: 1px solid var(--lab-border);
+  border-radius: 0.75rem;
+  background: var(--lab-bg);
+}
+
+.empty-state h2 { margin-top: 0; }
+
+/* Tablet and below: stack the panels, map first. */
+@media (max-width: 48rem) {
+  .workspace {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: var(--lab-workspace-height) var(--lab-workspace-height);
+    height: auto;
+  }
+
+  .chat-panel { border-inline-start: 0; border-block-start: 1px solid var(--lab-border); }
+}
+
+@media (max-width: 30rem) {
+  .site-header { gap: 0.5rem; padding-inline: 0.75rem; }
+  .site-brand { font-size: 0.9375rem; }
+  .site-navigation a { padding-inline: 0.6rem; }
+}

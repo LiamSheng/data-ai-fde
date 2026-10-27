@@ -1,0 +1,17 @@
+# Local source uploads are deny-by-default. This is separate from Git ignores.
+**
+!.gcloudignore
+!.dockerignore
+!Dockerfile
+!cloudbuild.yaml
+!pyproject.toml
+!uv.lock
+!README.md
+!src/
+!src/transit_realtime_pipeline/
+!src/transit_realtime_pipeline/*.py
+!tests/
+!tests/test_*.py
+!scripts/
+!scripts/check_ci.py
+!scripts/verify_gcs_repeat.py

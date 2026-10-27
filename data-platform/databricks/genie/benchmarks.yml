@@ -1,0 +1,99 @@
+# Benchmark questions for the route delay Genie space (KAN-18). They test Genie, not
+# the function: each answer is the route_delay_summary call(s) a correct reading of
+# the question makes, and Chat mode compares Genie's result set with it.
+#
+#   phrasings  2-4 ways people ask the same question; each becomes one benchmark
+#   calls      the function arguments; several calls are combined with UNION ALL
+#   sample     show the first phrasing as a sample question in the space
+#   insufficient  the question tests Not enough evidence; replay checks it still is
+#   expected   no SQL answer: a benchmark needs one, so the question is not deployed
+#              and is checked by hand in chat (see README.md)
+#
+# Edit, then run `python databricks/genie/build_space.py` to regenerate
+# route_delay.geniespace.json. `duckdb_check.py replay` runs every call on local data.
+questions:
+  # One route, one window.
+  - phrasings:
+      - 99 路工作日下午 3 点到 6 点一般晚多少？
+      - How late is the 99 on weekdays between 3 and 6 pm?
+    calls:
+      - {route: '99', day_type: weekday, start_hour: 15, end_hour: 18}
+    sample: true
+  - phrasings:
+      - 99 路工作日早上 8 点那一个小时晚点情况怎么样？
+      - How delayed is route 99 during the 8 am hour on weekdays?
+    calls:
+      - {route: '99', day_type: weekday, start_hour: 8, end_hour: 9}
+  - phrasings:
+      - R4 周日晚上 7 点到 9 点晚多少？
+      - How late does the R4 run on Sunday evenings from 7 to 9 pm?
+    calls:
+      - {route: R4, day_type: sunday, start_hour: 19, end_hour: 21}
+
+  # Aliases and SkyTrain long names. "On time" is user wording kept on purpose
+  # (CONTEXT.md avoids it); the answer is still the delay summary. SkyTrain is not in
+  # the Trip Updates feed, so its calls return no samples: Genie must say there is no
+  # real-time data, not that evidence is still short.
+  - phrasings:
+      - B-Line 晚高峰准时吗？
+      - Is the B-Line on time in the PM peak?
+    calls:
+      - {route: B-Line, day_type: weekday, start_hour: 15, end_hour: 18}
+  - phrasings:
+      - 天车早高峰晚点多吗？
+      - How delayed is SkyTrain in the morning peak?
+    calls:
+      - {route: 天车, day_type: weekday, start_hour: 6, end_hour: 9}
+    sample: true
+  - phrasings:
+      - Expo Line 周六上午 10 点到中午延误多少？
+      - What is the Expo Line delay on Saturdays from 10 am to noon?
+    calls:
+      - {route: Expo Line, day_type: saturday, start_hour: 10, end_hour: 12}
+
+  # A peak question without a day type means weekday.
+  - phrasings:
+      - 25 路晚高峰一般晚几分钟？
+      - What is the PM peak delay on route 25?
+    calls:
+      - {route: '25', day_type: weekday, start_hour: 15, end_hour: 18}
+
+  # Not enough evidence: a night bus in a quiet hour (1 trip in the 14 days to
+  # 2026-10-21; N19 at 3 am already had enough). replay fails if the call becomes
+  # sufficient on local data, which with one local service date it cannot yet; on
+  # the cloud, rerun this call as data accumulates.
+  - phrasings:
+      - N22 工作日凌晨 2 点到 3 点晚多少？
+      - How late is the N22 on weekdays between 2 and 3 am?
+    calls:
+      - {route: N22, day_type: weekday, start_hour: 2, end_hour: 3}
+    insufficient: true
+
+  # Comparisons: one call per side.
+  - phrasings:
+      - 99 路下午 3 点到 6 点，工作日和周六哪个更晚？
+      - Is the 99 later on weekdays or Saturdays between 3 and 6 pm?
+    calls:
+      - {route: '99', day_type: weekday, start_hour: 15, end_hour: 18}
+      - {route: '99', day_type: saturday, start_hour: 15, end_hour: 18}
+    sample: true
+  - phrasings:
+      - 早高峰 99 路和 R4 哪个更准时？
+      - Which is more punctual in the AM peak, the 99 or the R4?
+    calls:
+      - {route: '99', day_type: weekday, start_hour: 6, end_hour: 9}
+      - {route: R4, day_type: weekday, start_hour: 6, end_hour: 9}
+
+  # Out of scope: Genie should decline and suggest a question it can answer.
+  - phrasings:
+      - 哪条线路晚点最严重？
+      - Which route is the most delayed?
+    expected: >-
+      Says the space cannot rank routes, gives no figures, and suggests asking about
+      one route on one day type and hour window.
+  - phrasings:
+      - 明天早上 8 点的 99 路会晚吗？
+      - Will the 99 be late tomorrow at 8 am?
+    expected: >-
+      Says it reports past delays, not forecasts; may offer the weekday 8-9 am summary
+      for route 99, clearly labelled as history.

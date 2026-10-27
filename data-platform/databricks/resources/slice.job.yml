@@ -1,0 +1,59 @@
+resources:
+  jobs:
+    transit_slice:
+      name: transit-realtime-slice-${bundle.target}
+      description: Manual bounded Bronze ingestion followed by checked SQL transformations.
+      max_concurrent_runs: 1
+      timeout_seconds: 9000
+      environments:
+        - environment_key: bronze
+          spec:
+            environment_version: "4"
+            dependencies:
+              - gtfs-realtime-bindings==3.0.0
+        - environment_key: transformations
+          spec:
+            environment_version: "4"
+            dependencies:
+              - dbt-core==1.12.5
+              - dbt-databricks==1.12.7
+      tasks:
+        - task_key: landing_to_bronze
+          environment_key: bronze
+          # A first 14-day backfill parses ~2,000 snapshots; later runs read only new ones.
+          timeout_seconds: 7200
+          max_retries: 0
+          retry_on_timeout: false
+          disable_auto_optimization: true
+          notebook_task:
+            source: WORKSPACE
+            notebook_path: ../ingestion/landing_to_bronze.py
+            base_parameters:
+              catalog: ${var.catalog}
+              bronze_schema: ${var.schema_prefix}_bronze
+              rt_audit_ref: ${var.rt_audit_ref}
+              static_audit_ref: ${var.static_audit_ref}
+              tu_end_date: ${var.tu_end_date}
+              tu_days: ${var.tu_days}
+        - task_key: dbt_build
+          depends_on:
+            - task_key: landing_to_bronze
+          environment_key: transformations
+          timeout_seconds: 900
+          max_retries: 0
+          retry_on_timeout: false
+          disable_auto_optimization: true
+          dbt_task:
+            source: WORKSPACE
+            project_directory: ${workspace.file_path}/dbt
+            warehouse_id: ${var.warehouse_id}
+            catalog: ${var.catalog}
+            schema: ${var.schema_prefix}
+            commands:
+              - >-
+                dbt build --vars '{"bronze_catalog":"${var.catalog}","bronze_schema":"${var.schema_prefix}_bronze","reference_static_sha256":"${var.reference_static_sha256}"}'
+              # After build: the function reads the freshly built fact and dimension.
+              - >-
+                dbt run-operation deploy_route_delay_summary --vars '{"bronze_catalog":"${var.catalog}","bronze_schema":"${var.schema_prefix}_bronze","reference_static_sha256":"${var.reference_static_sha256}"}'
+              - >-
+                dbt docs generate --vars '{"bronze_catalog":"${var.catalog}","bronze_schema":"${var.schema_prefix}_bronze","reference_static_sha256":"${var.reference_static_sha256}"}'

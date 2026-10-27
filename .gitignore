@@ -1,0 +1,21 @@
+# Local-only documentation: planning, walkthroughs, ADRs, runbooks, evidence records.
+# Versioned by [YYYY-MM-DD] markers inside each file, not by Git (see CLAUDE.md).
+/docs/
+
+# Local history archive of the two pre-monorepo repositories (git bundles).
+/archive/
+
+# AI tool configuration, kept beside the code it configures but not versioned.
+CLAUDE.md
+**/docs/agents/
+.scratch/
+
+# Secrets and local configuration (layer .gitignore files add their own rules).
+.env
+.env.*
+!.env.example
+
+# Operating system and editor files
+.DS_Store
+.idea/
+.vscode/

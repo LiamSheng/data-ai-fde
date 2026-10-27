@@ -1,0 +1,166 @@
+version: 2
+models:
+  - name: stg_capture_attempts
+    columns:
+      - name: attempt_id
+        data_tests: [unique, not_null]
+  - name: stg_vehicle_positions
+    data_tests:
+      - unique_key:
+          arguments:
+            columns: [payload_sha256, entity_index]
+  - name: stg_routes
+    data_tests:
+      - unique_key:
+          arguments:
+            columns: [static_payload_sha256, route_id]
+  - name: dim_reference_routes
+    description: Explicit reference version for labels; historical applicability is not established.
+    columns:
+      - name: route_id
+        data_tests: [unique, not_null]
+  - name: int_latest_static_version
+    description: >-
+      The Static version labelling and classifying Delay samples: latest successful
+      capture among versions whose routes are in Bronze. One row, or none before any
+      Static load.
+    columns:
+      - name: payload_sha256
+        data_tests: [unique, not_null]
+  - name: stg_calendar
+    data_tests:
+      - unique_key:
+          arguments:
+            columns: [static_payload_sha256, service_id]
+  - name: stg_calendar_dates
+    data_tests:
+      - unique_key:
+          arguments:
+            columns: [static_payload_sha256, service_id, service_date]
+    columns:
+      - name: service_date
+        data_tests: [not_null]
+      - name: exception_type
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: [1, 2]
+  - name: service_date_overrides
+    description: >-
+      Service dates whose Day type differs from their day of the week, derived from the
+      latest Static calendar: the single Day type services (only Monday-Friday, only
+      Saturday or only Sunday) running on a calendar exception date, when they agree.
+    columns:
+      - name: service_date
+        data_tests: [unique, not_null]
+      - name: day_type
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [weekday, saturday, sunday]
+  - name: dim_routes
+    description: >-
+      Routes of the latest Static version in Bronze (int_latest_static_version),
+      labelling Delay samples. Unlike dim_reference_routes, it moves with new Static
+      versions.
+    columns:
+      - name: route_id
+        data_tests: [unique, not_null]
+      - name: route_display_name
+        description: >-
+          Route display name: short name without leading zeros ("099" → "99"), or the
+          long name when the short name is blank (SkyTrain lines, SeaBus).
+  - name: int_vehicle_observations
+    description: A capture attempt joined to immutable content, preserving repeated observations.
+    data_tests:
+      - unique_key:
+          arguments:
+            columns: [attempt_id, entity_index]
+    columns:
+      - name: attempt_id
+        data_tests: [not_null]
+      - name: vehicle_id
+        data_tests: [not_null]
+      - name: route_id
+        data_tests: [not_null]
+  - name: route_vehicle_counts
+    description: Observed distinct vehicles per route and successful FULL_DATASET capture attempt.
+    data_tests:
+      - unique_key:
+          arguments:
+            columns: [attempt_id, route_id]
+    columns:
+      - name: route_id
+        data_tests: [not_null]
+      - name: observed_vehicle_count
+        description: Distinct nonblank vehicle IDs, not a count of rows or scheduled vehicles.
+        data_tests: [not_null]
+      - name: static_linkage_status
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: [unverified_reference]
+  - name: snapshot_status
+    columns:
+      - name: attempt_id
+        data_tests: [unique, not_null]
+  - name: stg_trip_updates
+    description: Typed Trip Updates rows from audited payloads; canceled trips and skipped stops retained.
+    data_tests:
+      - unique_key:
+          arguments:
+            columns: [payload_sha256, entity_index, update_index]
+    columns:
+      - name: service_date
+        description: Service date from the trip's start_date; never inferred when missing.
+        data_tests:
+          - not_null:
+              config:
+                where: has_trip_update
+  - name: fct_trip_delay_sample
+    description: >-
+      One Delay sample per snapshot and SCHEDULED or DUPLICATED trip with a Next stop. Shares of
+      samples describe in-service vehicle moments, not trips.
+    data_tests:
+      - unique_key:
+          arguments:
+            columns: [payload_sha256, entity_index]
+    columns:
+      - name: payload_sha256
+        data_tests: [not_null]
+      - name: trip_id
+        data_tests: [not_null]
+      - name: service_date
+        data_tests: [not_null]
+      - name: route_display_name
+        description: >-
+          Route display name from dim_routes; null when route_id is missing or not in
+          the dimension. Such samples are kept; route_unmatched_sample_share watches them.
+      - name: day_type
+        description: >-
+          Day type of the service date; service_date_overrides (from the Static calendar)
+          first, then day of week.
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [weekday, saturday, sunday]
+      - name: observation_hour
+        description: America/Vancouver hour of the feed timestamp, independent of service date.
+        data_tests: [not_null]
+      - name: current_delay_seconds
+        description: >-
+          Signed predicted arrival delay at the Next stop; negative is early. Only for
+          departed trips (Next stop past the origin) whose predicted arrival is between
+          delay_sample_min_lead_seconds and delay_sample_max_lead_seconds after the feed
+          timestamp.
+        data_tests: [not_null]
+      - name: prediction_lead_seconds
+        description: Predicted Next stop arrival minus feed timestamp.
+      - name: is_late
+        description: Late sample. Current delay of at least late_threshold_seconds.
+        data_tests: [not_null]
+      - name: is_suspect_delay
+        description: Suspect delay. Absolute Current delay above suspect_delay_limit_seconds.
+        data_tests: [not_null]
