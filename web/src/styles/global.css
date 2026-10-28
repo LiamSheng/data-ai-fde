@@ -1,131 +1,225 @@
-:root {
-  --sl-content-width: 72rem;
-  /* The Map page's content column (Starlight's splash width); the header follows it on every page. */
-  --lab-column: 67.5rem;
-  --lab-accent: #0f8f86;
-  --lab-bg: #fff;
-  --lab-border: #d4d4d8;
-  --lab-muted: #71717a;
-  --lab-nav-text: #52525b;
-  --lab-nav-strong: #18181b;
-  --lab-nav-hover: #f4f4f5;
-  --lab-chat: #fdf1f3;
-  --lab-chat-text: #c28a96;
-  --lab-workspace-height: clamp(18rem, 60vh, 36rem);
-  color-scheme: light;
+/* Hallmark · shape: app screen · genre: modern-minimal · theme: Cobalt (by request) · redesign: full
+ * nav: a hairline bar, the wordmark left and the pages as keys on a sunken tray at the right · signature: the ASCII field, its code in bold over lighter symbols, traffic narrowing from the page edge into the gaps between three panels, pipeline code in the gaps and model steps narrowing out past the chat · states: map loading, waiting (no key), failed, loaded; details empty; chat empty; blog empty
+ * axes: light/grotesk-sans/cool · posture: restrained · contrast: pass · copy: verbatim (pinned by tests/pages.test.mjs) · v2.0.0 */
+/* Hallmark · pre-emit critique: P4 H4 E4 S4 R4 V5 · weakest: R, the field surrounds a live map; the panels cover it whole, so it runs only in the gutters and the gaps, never over the tiles or the chat */
+/* Hallmark · waive 75 · the 10px links and buttons are inside the Google map canvas · the map attribution is drawn by the Google SDK, not by this page */
+/* Hallmark · waive 39b · the 14px button is the keyboard shortcuts control of the Google map · the Google SDK sizes its own controls over the map data, and they load with it */
+/* Hallmark · answered F1 · the map error line keeps its straight apostrophe because tests/pages.test.mjs matches it verbatim */
+@import url("./tokens.css");
+@import url("./base.css");
+
+/* Starlight caps a page without a sidebar at 67.5rem; the Map page takes the lab column, like the header. */
+:root:not([data-has-sidebar]) { --sl-content-width: var(--lab-column); }
+
+/* Starlight and starlight-theme-black read these names; each points at a Cobalt token. */
+:root,
+:root[data-theme='light'] {
+  --sl-font: var(--font-body);
+  --sl-font-mono: var(--font-outlier);
+  --foreground: var(--color-ink);
+  --background: var(--color-paper);
+  --gray-1: var(--color-ink);
+  --gray-2: var(--color-ink-2);
+  --gray-3: var(--color-muted);
+  --gray-4: var(--color-muted);
+  --gray-5: var(--color-rule-2);
+  --gray-6: var(--color-rule);
+  --gray-7: var(--color-paper-2);
+  --selection: var(--color-accent-wash);
+  --selection-foreground: var(--color-ink);
+  /* The Map page's column, a fixed share of the window so the gutters the field runs in keep their proportion;
+   * the header follows it on every page. Capped for very wide screens. */
+  --lab-column: min(84vw, 180rem);
+  --lab-workspace-height: clamp(30rem, calc(100svh - var(--sl-nav-height) - 2 * var(--space-2xl)), 54rem);
+  /* The gaps between panels are whole field cells, so a channel of glyphs runs through each. */
+  --lab-gap-x: calc(3 * var(--cell-w));
+  --lab-gap-y: calc(2 * var(--cell-h));
 }
 
-/* Circuit-trace texture behind every page; content surfaces stay opaque on top of it.
-   Data URIs can't read CSS variables, so the SVG repeats the --lab-accent hex. */
-body {
-  background-color: var(--lab-bg);
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240' fill='none' stroke='%230f8f86' stroke-opacity='0.08' stroke-width='1.5'%3E%3Cpath d='M0 40h60l20 20h60M140 60l30-30h70M30 0v20l20 20M200 30v50l-20 20H120l-20 20v60M0 160h40l20-20h20M100 180h80l20 20v40M180 240v-20M240 140h-40l-20-20M60 240v-30l20-20h20'/%3E%3Cg fill='%230f8f86' fill-opacity='0.08' stroke='none'%3E%3Ccircle cx='140' cy='60' r='3.5'/%3E%3Ccircle cx='50' cy='40' r='3.5'/%3E%3Ccircle cx='100' cy='180' r='3.5'/%3E%3Ccircle cx='80' cy='140' r='3.5'/%3E%3Ccircle cx='200' cy='80' r='3.5'/%3E%3Ccircle cx='180' cy='120' r='3.5'/%3E%3C/g%3E%3C/svg%3E");
-  background-size: 240px 240px;
-}
+:root[data-has-sidebar] { --sl-content-width: 48rem; }
 
-/* Header: a floating pill as wide as the Workspace, hidden while scrolling down. */
+/* Header: a hairline bar across the page, hidden while scrolling down. */
 header.header {
-  padding-inline-start: var(--sl-content-pad-x);
-  border-bottom: 0;
-  background: transparent;
-  transition: transform 0.25s ease;
+  padding-inline: var(--sl-content-pad-x);
+  border-bottom: var(--rule-hair) solid var(--color-rule);
+  background: var(--color-paper);
+  transition: transform var(--dur-short) var(--ease-out);
 }
 
 header.header[data-hidden] { transform: translateY(-110%); }
 
-/* Desktop: same padding on every page (sidebar pages included) so the column never shifts. */
-@media (min-width: 50rem) {
-  :root header.header,
-  :root[data-has-sidebar] header.header {
-    padding-inline: var(--sl-content-pad-x);
-  }
-}
-
 .site-header {
   display: grid;
-  grid-template-columns: 1fr auto 1fr;
+  grid-template-columns: 1fr auto;
   align-items: center;
-  gap: 1rem;
+  gap: var(--space-md);
   width: 100%;
   max-width: var(--lab-column);
   min-width: 0;
   height: 100%;
   margin-inline: auto;
-  padding-inline: 1.25rem;
-  border: 1px solid var(--lab-border);
-  border-radius: 999px;
-  background: var(--lab-bg);
-  box-shadow: 0 6px 24px rgb(0 0 0 / 0.06), 0 1px 2px rgb(0 0 0 / 0.04);
 }
 
 .site-brand {
   display: inline-flex;
   align-items: center;
   justify-self: start;
-  gap: 0.5rem;
-  color: var(--lab-accent);
-  font-size: 1.0625rem;
-  font-weight: 700;
-  letter-spacing: -0.01em;
+  gap: var(--space-xs);
+  color: var(--color-ink);
+  font-family: var(--font-display);
+  font-size: var(--text-lg);
+  font-weight: 600;
+  letter-spacing: var(--tracking-display);
   text-decoration: none;
   white-space: nowrap;
 }
 
-.site-logo { flex-shrink: 0; fill: var(--lab-accent); }
-.site-logo-links { stroke: var(--lab-accent); stroke-width: 1.5; stroke-linecap: round; opacity: 0.55; }
+.site-brand:hover { text-decoration: underline; text-decoration-color: var(--color-accent); }
+.site-brand:active { color: var(--color-ink-2); }
 
+.site-logo { flex-shrink: 0; fill: var(--color-ink); }
+.site-logo circle:nth-of-type(3) { fill: var(--color-accent); }
+.site-logo-links { stroke: var(--color-rule-2); stroke-width: 1.5; stroke-linecap: round; }
+
+/* The pages on their tray, then the off-site profiles as plain icons. */
+.site-actions { display: flex; align-items: center; gap: var(--space-sm); }
+
+.site-profile {
+  display: inline-grid;
+  place-items: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: var(--radius-input);
+  color: var(--color-ink-2);
+  transition: color var(--dur-micro) var(--ease-out), background-color var(--dur-micro) var(--ease-out);
+}
+
+.site-profile svg { fill: currentColor; }
+.site-profile:hover { color: var(--color-accent); background: var(--color-paper-2); }
+.site-profile:active { color: var(--color-accent-deep); background: var(--color-paper-3); }
+
+/* The pages are keys on a sunken tray; the current page stays pressed. */
 .site-navigation {
   display: flex;
   align-items: center;
-  gap: 0.25rem;
+  gap: var(--space-2xs);
+  padding: var(--space-2xs) var(--space-2xs) var(--space-xs);
+  border-radius: var(--radius-input);
+  background: var(--color-paper-3);
 }
 
 .site-navigation a {
+  position: relative;
   display: inline-flex;
   align-items: center;
-  min-height: 2.25rem;
-  padding: 0.35rem 0.85rem;
-  border-radius: 999px;
-  color: var(--lab-nav-text);
-  font-size: 0.9375rem;
+  min-height: 2rem;
+  padding-inline: var(--space-sm);
+  border: var(--rule-hair) solid var(--color-rule-2);
+  border-radius: var(--space-2xs);
+  background: var(--color-key-face);
+  box-shadow: var(--shadow-key);
+  color: var(--color-ink);
+  font-family: var(--font-display);
+  font-size: var(--text-sm);
   font-weight: 500;
   text-decoration: none;
+  white-space: nowrap;
+  transition: transform var(--dur-micro) var(--ease-out), box-shadow var(--dur-micro) var(--ease-out);
 }
 
-.site-navigation a:hover { background: var(--lab-nav-hover); color: var(--lab-nav-strong); }
-.site-navigation a[aria-current='page'] { color: var(--lab-nav-strong); font-weight: 650; }
-.site-navigation a:focus-visible { outline-color: var(--lab-nav-strong); }
+.site-navigation a::after { content: ''; position: absolute; inset: calc(-1 * var(--space-xs)) calc(-1 * var(--space-3xs)); }
+.site-navigation a:hover { transform: translateY(-1px); }
+.site-navigation a:active,
+.site-navigation a[aria-current='page'] {
+  transform: translateY(3px);
+  background: var(--color-paper-2);
+  box-shadow: var(--shadow-key-press);
+}
 
 a:focus-visible,
 button:focus-visible,
 select:focus-visible {
-  outline: 2px solid var(--lab-accent);
-  outline-offset: 3px;
+  outline: 2px solid var(--color-focus);
+  outline-offset: var(--space-3xs);
 }
 
-.page-intro { color: var(--sl-color-gray-2); }
+.page-intro { color: var(--color-ink-2); }
 
 /* The theme zeroes content padding on wide screens; the Map page keeps its side margins. */
-:root:not([data-has-sidebar]) .content-panel { padding-inline: 0; }
+:root:not([data-has-sidebar]) .content-panel { position: relative; padding-inline: 0; }
 
 @media (min-width: 48rem) {
   :root:not([data-has-sidebar]) .content-panel { padding-inline: var(--sl-content-pad-x); }
 }
 
-/* Workspace: Map panel and Chat panel, half each, inside one bordered frame. */
-.workspace {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  height: var(--lab-workspace-height);
-  margin-block: 2rem;
-  overflow: hidden;
-  border: 1px solid var(--lab-border);
-  border-radius: 0.75rem;
-  background: var(--lab-bg);
+/* Without script, a dot on every cell of the field stands in for it. */
+:root:not([data-has-sidebar]) .content-panel:not(:has(.ascii-field[data-live])) {
+  background-image: radial-gradient(circle at 50% 50%, var(--color-glyph-2) 1px, transparent 1.5px);
+  background-size: var(--cell-w) var(--cell-h);
 }
 
-.map-panel { position: relative; min-width: 0; }
+/* The field spans the whole Map page band and draws over both panels; the pointer passes through. */
+.ascii-field {
+  position: absolute;
+  inset: 0;
+  z-index: var(--z-raised);
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+/* Workspace: three cut panels, map over details on the left and the chat beside them; the gaps carry the field. */
+.workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+  grid-template-rows: minmax(0, 5fr) minmax(0, 2fr);
+  gap: var(--lab-gap-y) var(--lab-gap-x);
+  height: var(--lab-workspace-height);
+  margin-block: var(--space-2xl);
+}
+
+.map-panel,
+.detail-panel,
+.chat-panel {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  border: var(--rule-hair) solid var(--color-rule-2);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+}
+
+@supports (corner-shape: bevel) {
+  .map-panel,
+  .detail-panel,
+  .chat-panel {
+    border-radius: var(--cut-l) 4px var(--cut-l) 4px;
+    corner-shape: bevel round bevel round;
+  }
+}
+
+.map-panel { grid-column: 1; grid-row: 1; background: var(--color-paper-2); }
 .map-canvas { width: 100%; height: 100%; }
+
+/* Details: plain paper under the map; its one line sits above the field. */
+.detail-panel {
+  display: grid;
+  grid-column: 1;
+  grid-row: 2;
+  place-items: center;
+  padding: var(--space-lg);
+  background: var(--color-paper);
+}
+
+.detail-panel p {
+  position: relative;
+  z-index: var(--z-dropdown);
+  color: var(--color-muted);
+  font-family: var(--font-display);
+  font-size: var(--text-sm);
+  font-weight: 500;
+}
 
 .map-loading,
 .map-error {
@@ -134,8 +228,8 @@ select:focus-visible {
   display: none;
   place-items: center;
   align-content: center;
-  gap: 1rem;
-  padding: 1.5rem;
+  gap: var(--space-md);
+  padding: var(--space-lg);
   text-align: center;
 }
 
@@ -146,82 +240,102 @@ select:focus-visible {
 .map-panel[data-map-state='waiting'] .map-canvas,
 .map-panel[data-map-state='failed'] .map-canvas { visibility: hidden; }
 
+/* The loader is the one loop besides the field; it stops under reduced motion. */
 .map-pulse {
-  width: 0.75rem;
-  height: 0.75rem;
-  border-radius: 50%;
-  background: var(--lab-accent);
-  animation: map-pulse 1.4s ease-out infinite;
+  width: var(--cell-w);
+  height: var(--cell-h);
+  background: var(--color-accent);
+  animation: map-pulse 1s steps(2, jump-none) infinite;
 }
 
-.map-error p { margin: 0; color: var(--lab-muted); font-size: 0.9375rem; }
+.map-error p { color: var(--color-muted); font-size: var(--text-sm); }
 .map-error-art { overflow: visible; }
-.map-error-links { stroke: var(--lab-accent); stroke-width: 2; stroke-linecap: round; opacity: 0.45; }
-.map-error-nodes,
-.map-error-loose { fill: var(--lab-accent); }
-.map-error-broken { stroke-dasharray: 3 5; animation: map-flicker 1.6s steps(2, jump-none) infinite; }
-.map-error-loose { transform-origin: 80px 34px; animation: map-wobble 2.4s ease-in-out infinite; }
+.map-error-links { stroke: var(--color-rule-2); stroke-width: 1.5; stroke-linecap: round; }
+.map-error-broken { stroke: var(--color-muted); stroke-dasharray: 3 5; }
+.map-error-nodes { fill: var(--color-ink); }
+.map-error-loose { fill: var(--color-accent); }
 
+/* Chat panel: the graphite material; its one line sits above the field, a label on the middle channel. */
 .chat-panel {
   display: grid;
   place-items: center;
-  border-inline-start: 1px solid var(--lab-border);
-  background: var(--lab-chat);
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  padding: var(--space-lg);
+  border-color: var(--color-graphite);
+  background: var(--color-graphite);
+  color: var(--color-graphite-ink);
 }
 
-.chat-panel p { margin: 0; color: var(--lab-chat-text); font-size: 0.875rem; letter-spacing: 0.02em; }
+.chat-panel p {
+  position: relative;
+  z-index: var(--z-dropdown);
+  padding: var(--space-2xs) var(--space-xs);
+  background: var(--color-graphite);
+  color: var(--color-graphite-ink);
+  font-family: var(--font-display);
+  font-size: var(--text-sm);
+  font-weight: 500;
+}
 
 @keyframes map-pulse {
-  0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--lab-accent) 45%, transparent); }
-  100% { box-shadow: 0 0 0 1rem transparent; }
-}
-
-@keyframes map-flicker {
   0% { opacity: 1; }
-  100% { opacity: 0.1; }
-}
-
-@keyframes map-wobble {
-  0%, 100% { transform: rotate(-8deg); }
-  50% { transform: rotate(10deg) translateX(3px); }
+  100% { opacity: 0.25; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .map-pulse,
-  .map-error-broken,
-  .map-error-loose { animation: none; }
-  header.header { transition: none; }
+  .map-pulse { animation: none; }
+  header.header,
+  .site-navigation a,
+  .site-profile { transition: none; }
 }
 
-/* Blog reading area stays opaque above the circuit texture. */
-[data-has-sidebar] .main-pane {
-  min-height: calc(100vh - var(--sl-nav-height));
-  background: var(--lab-bg);
+/* Blog pages: the title clears the header; the current sidebar link sits on the cobalt wash. */
+:root[data-has-sidebar] .content-panel:first-of-type { padding-block-start: var(--space-xl); }
+
+.sidebar-content a[aria-current='page'] {
+  border-radius: var(--radius-input);
+  background: var(--color-accent-wash);
+  color: var(--color-accent-deep);
 }
 
 .empty-state {
-  margin-block: 2rem;
-  padding: 1.5rem;
-  border: 1px solid var(--lab-border);
-  border-radius: 0.75rem;
-  background: var(--lab-bg);
+  margin-block: var(--space-xl);
+  padding: var(--space-lg);
+  border: var(--rule-hair) solid var(--color-rule-2);
+  border-radius: var(--radius-card);
+  background: var(--color-paper);
+  box-shadow: var(--shadow-card);
 }
 
-.empty-state h2 { margin-top: 0; }
+@supports (corner-shape: bevel) {
+  .empty-state {
+    border-radius: var(--cut-l) 4px var(--cut-l) 4px;
+    corner-shape: bevel round bevel round;
+  }
+}
 
-/* Tablet and below: stack the panels, map first. */
+.sl-markdown-content .empty-state h2 { margin: 0 0 var(--space-xs); padding-block-start: 0; }
+
+/* Tablet and below: stack map, details, chat; the field turns to flow top to bottom. */
 @media (max-width: 48rem) {
+  /* Phones keep the page padding as their only gutter. */
+  :root,
+  :root[data-theme='light'] { --lab-column: 100%; }
+
   .workspace {
     grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: var(--lab-workspace-height) var(--lab-workspace-height);
+    grid-template-rows: clamp(20rem, 60svh, 32rem) minmax(8rem, auto) minmax(12rem, auto);
     height: auto;
+    margin-block: var(--space-xl);
   }
 
-  .chat-panel { border-inline-start: 0; border-block-start: 1px solid var(--lab-border); }
+  .map-panel, .detail-panel, .chat-panel { grid-column: 1; }
+  .detail-panel { grid-row: 2; }
+  .chat-panel { grid-row: 3; }
 }
 
 @media (max-width: 30rem) {
-  .site-header { gap: 0.5rem; padding-inline: 0.75rem; }
-  .site-brand { font-size: 0.9375rem; }
-  .site-navigation a { padding-inline: 0.6rem; }
+  .site-brand { font-size: var(--text-md); }
+  .site-navigation a { padding-inline: var(--space-xs); }
 }

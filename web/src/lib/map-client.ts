@@ -1,3 +1,5 @@
+import { MAP_STYLE } from './map-style.ts';
+
 /** A single document owns its SDK request; each map panel owns its map and state. */
 type MapState = 'waiting' | 'loading' | 'loaded' | 'failed';
 type BrowserWindow = Window & typeof globalThis;
@@ -173,7 +175,9 @@ export function initializeMapPanel(
     if (typeof maps.version === 'string') root.dataset.mapSdkVersion = maps.version;
     try {
       map = new maps.Map(canvas, {
-        center: { lat: 49.20, lng: -122.85 }, zoom: 10, mapTypeId: 'roadmap',
+        center: { lat: 49.1044, lng: -122.6604 }, zoom: 14, mapTypeId: 'roadmap', styles: MAP_STYLE,
+        // No buttons on the map; drag pans and the wheel zooms (up to zoom in) without a modifier or an overlay.
+        disableDefaultUI: true, gestureHandling: 'greedy',
       });
       if (!connected() || controller.state === 'failed') return;
       tileTimer = win.setTimeout(fail, TIMEOUT_MS);
