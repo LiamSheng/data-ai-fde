@@ -1,0 +1,54 @@
+[
+ {
+  "mode": "redesign",
+  "depth": "full",
+  "scope": "app",
+  "shape": "app screen",
+  "theme": "cobalt",
+  "axes": "light/grotesk-sans/cool",
+  "hero": "none (app screen); the ASCII field is the ground",
+  "nav": "hairline bar, wordmark left, pages as keys on a sunken tray",
+  "footer": "none (Starlight shell)",
+  "imagery": "the live Google map in graphite duotone",
+  "photos": [],
+  "entry": "workspace",
+  "fingerprint": "app/cobalt/field-through-map-3fr-chat-2fr",
+  "sections": [
+   "workspace: map 3fr + graphite chat 2fr under one ASCII field",
+   "blog: title, intro, cut empty state"
+  ],
+  "signature": "ASCII field: raw traffic crosses the map, converges on a spine, resolves as lines through the chat panel",
+  "waived": [
+   "39b",
+   "75"
+  ],
+  "prompt": "Cobalt theme by request, an ASCII field passing through the map and the AI chat",
+  "date": "2026-10-28"
+ },
+ {
+  "mode": "redesign",
+  "depth": "full",
+  "scope": "app",
+  "shape": "app screen",
+  "theme": "wayfind",
+  "axes": "light/mono/cool",
+  "hero": "none (app screen)",
+  "nav": "kept floating pill, ink cell for the current link",
+  "footer": "none (Starlight shell)",
+  "imagery": "the live Google map",
+  "photos": [],
+  "entry": "workspace",
+  "fingerprint": "app/wayfind/map-2fr-chat-1fr",
+  "sections": [
+   "workspace: map 2fr + chat 1fr",
+   "blog: title, intro, empty state"
+  ],
+  "signature": "Greater Vancouver map in a 2px ink frame",
+  "waived": [
+   "39b",
+   "75"
+  ],
+  "prompt": "a personal data engineering lab: a Greater Vancouver transit map beside an AI chat assistant, plus a blog of learning notes",
+  "date": "2026-10-28"
+ }
+]

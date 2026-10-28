@@ -1,9 +1,20 @@
 ---
 import MapPanel from './MapPanel.astro';
+import DetailPanel from './DetailPanel.astro';
 import ChatPanel from './ChatPanel.astro';
 ---
 
 <div class="workspace not-content">
   <MapPanel />
+  <DetailPanel />
   <ChatPanel />
 </div>
+<canvas class="ascii-field not-content" data-ascii-field aria-hidden="true"></canvas>
+
+<script>
+  import { startAsciiField } from '../lib/ascii-field';
+
+  const canvas = document.querySelector<HTMLCanvasElement>('[data-ascii-field]');
+  const workspace = document.querySelector<HTMLElement>('.workspace');
+  if (canvas && workspace) startAsciiField(canvas, workspace);
+</script>

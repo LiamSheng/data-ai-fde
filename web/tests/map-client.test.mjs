@@ -93,7 +93,7 @@ test('same root is initialized once and waits for actual tile readiness', async 
   f.ready(); await flush();
   assert.equal(c.state, 'loading');
   assert.equal(f.constructors(), 1);
-  assert.deepEqual(c.map.options.center, { lat: 49.20, lng: -122.85 });
+  assert.deepEqual(c.map.options.center, { lat: 49.1044, lng: -122.6604 });
   f.maps[0].tiles();
   assert.equal(c.state, 'loaded');
   assert.equal(f.timers.size, 0);
