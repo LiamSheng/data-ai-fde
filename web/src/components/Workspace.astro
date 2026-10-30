@@ -17,4 +17,15 @@ import ChatPanel from './ChatPanel.astro';
   const canvas = document.querySelector<HTMLCanvasElement>('[data-ascii-field]');
   const workspace = document.querySelector<HTMLElement>('.workspace');
   if (canvas && workspace) startAsciiField(canvas, workspace);
+
+  // The glass sheen follows the pointer while it is over a glass panel.
+  for (const panel of document.querySelectorAll<HTMLElement>('.detail-panel, .chat-panel')) {
+    panel.addEventListener('pointermove', (event) => {
+      const box = panel.getBoundingClientRect();
+      panel.style.setProperty('--glass-x', `${event.clientX - box.left}px`);
+      panel.style.setProperty('--glass-y', `${event.clientY - box.top}px`);
+      panel.dataset.lit = '';
+    }, { passive: true });
+    panel.addEventListener('pointerleave', () => delete panel.dataset.lit);
+  }
 </script>

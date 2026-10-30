@@ -1,8 +1,9 @@
 /**
- * The ASCII field: traffic enters across the whole left gutter and narrows onto the left column,
- * runs through the gaps between the three panels as pipeline code, and past the Chat panel
- * narrows again, as the model's steps, to one dense band at the page edge.
- * The panels cover the field; it draws only on the paper around and between them.
+ * The ASCII field: strands of traffic run left to right across the band that holds the
+ * workspace, dense under the header and thinning toward the bottom of the panels. Each strand
+ * is a dotted line with a few dense bodies travelling along it, most trailing a line of
+ * pipeline code, SQL or an assistant step. The map covers the field; it shows
+ * on the paper around and between the panels, and under the glass of the details and the chat, which blurs it.
  * One canvas on an 8 by 16 cell; colours come from the Cobalt tokens, never literals.
  */
 const CELL_W = 8;
@@ -14,35 +15,38 @@ const SYMBOL_ALPHA = 0.6;
 const LENS_PX = 72;
 // The reduced-motion still is drawn at this moment of the loop.
 const STILL_T = 14;
-// At the page edge the right funnel is this share of the chat's height; the left one reaches this far past the workspace.
-const OUT_BAND = 0.3;
-const IN_REACH = 0.25;
+// Strands start this many rows apart, give or take, and up to STRAND_FADE rows further apart at the bottom;
+// a body spreads at most this many rows off its strand.
+const STRAND_MIN = 1;
+const STRAND_SPREAD = 2;
+const STRAND_FADE = 13;
+const BODY_ROWS = 2;
 
-// The gaps carry the transformations behind the map, named after the real tables in data-platform/.
-const CODE = [
-  'spark.readStream.table("bronze.vehicle_positions").withWatermark("event_ts", "10 minutes")',
-  '.groupBy(F.window("event_ts", "5 minutes"), "route_id").agg(F.avg("delay_s").alias("avg_delay"))',
-  '.writeStream.toTable("silver.stg_trip_updates")',
-  'dbt run --select gold.route_delay_summary',
-];
-// Past the chat: what the assistant does with them.
-const STEPS = [
+// What strands carry: the pipeline behind the map (tables and columns from the models in data-platform/)
+// and what the assistant does with it, interleaved so neighbouring strands differ.
+const TEXTS = [
+  'spark.readStream.table("bronze.vehicle_positions")',
+  "select route_id, avg(arrival_delay) from gold.fct_trip_delay_sample group by route_id",
   'Thinking...',
+  '.withWatermark("event_ts", "10 minutes")',
+  "where trip_schedule_relationship in ('SCHEDULED', 'DUPLICATED')",
   'tool: genie.ask("average delay by route")',
+  '.groupBy(F.window("event_ts", "5 minutes"), "route_id")',
+  'row_number() over (partition by payload_sha256, entity_index order by stop_sequence)',
   'reading gold.route_delay_summary',
-  'Thinking...',
-  'checking the snapshot time',
+  '.writeStream.toTable("silver.stg_trip_updates")',
+  'timestampdiff(SECOND, feed_timestamp, arrival_time) as prediction_lead_seconds',
+  'dbt run --select gold.route_delay_summary',
   'drafting answer...',
 ];
 
 interface Box { left: number; top: number; right: number; bottom: number }
 // `code` marks the letters of a snippet or a step: bold and opaque, over the lighter symbols.
 type Cell = [glyph: string, tone: string, code?: boolean] | undefined;
-
-const smoothstep = (lo: number, hi: number, x: number) => {
-  const t = Math.min(1, Math.max(0, (x - lo) / (hi - lo)));
-  return t * t * (3 - 2 * t);
-};
+interface Body { phase: number; speed: number; length: number; rows: number; text?: string }
+// `fade` runs from 0 under the header to 1 at the bottom of the panels.
+// `frame` is where each body sits this frame and where its text starts, undefined when the text would cross another.
+interface Strand { y: number; fade: number; bodies: Body[]; frame: { centre: number; textStart?: number }[] }
 
 const hash = (x: number, y: number) => {
   const s = Math.sin(x * 127.1 + y * 311.7) * 43758.5453;
@@ -61,16 +65,6 @@ function noise(x: number, y: number): number {
 
 const inside = (box: Box, x: number, y: number) => x >= box.left && x < box.right && y >= box.top && y < box.bottom;
 
-// Half-open, so a centre on a cell boundary still lands on exactly one row.
-const onRow = (y: number, centre: number) => centre >= y - CELL_H / 2 && centre < y + CELL_H / 2;
-
-/** The character of `text` at cell column `col`, scrolling with the flow; undefined in the space between repeats. */
-const scroll = (text: string, col: number, t: number, speed: number) => {
-  const span = text.length + 6;
-  const i = (((Math.floor(col - t * speed)) % span) + span) % span;
-  return i < text.length ? text[i] : undefined;
-};
-
 export function startAsciiField(canvas: HTMLCanvasElement, workspace: HTMLElement): () => void {
   const ctx = canvas.getContext('2d');
   const panels = ['.map-panel', '.detail-panel', '.chat-panel'].map((selector) => workspace.querySelector<HTMLElement>(selector));
@@ -81,20 +75,54 @@ export function startAsciiField(canvas: HTMLCanvasElement, workspace: HTMLElemen
   // One tone per ramp step; the field never goes lighter than glyph-2.
   const paperTones = ['--color-glyph-2', '--color-glyph-2', '--color-glyph-3', '--color-glyph-3', '--color-glyph-3',
     '--color-glyph-4', '--color-glyph-4', '--color-glyph-4', '--color-accent-deep'].map(token);
-  const [glyph3, glyph4, deep] = ['--color-glyph-3', '--color-glyph-4', '--color-accent-deep'].map(token);
+  const glyph4 = token('--color-glyph-4');
   const font = `400 12px ${token('--font-outlier')}`;
   const codeFont = `700 12px ${token('--font-outlier')}`;
   const reduce = window.matchMedia('(prefers-reduced-motion: reduce)');
 
-  let width = 0, height = 0;
-  let map: Box, detail: Box, chat: Box;
-  let vertical = false;
+  let width = 0, height = 0, bottom = 0;
+  let boxes: Box[] = [];
+  // The map covers the field; the details and the chat are glass, so the field runs on under them.
+  let covered: Box[] = [];
+  let strands: Strand[] = [];
   let pointer: { x: number; y: number } | undefined;
 
   const relative = (el: Element, origin: DOMRect): Box => {
     const r = el.getBoundingClientRect();
     return { left: r.left - origin.left, top: r.top - origin.top, right: r.right - origin.left, bottom: r.bottom - origin.top };
   };
+
+  /** Strands on whole rows, a few apart, plus one through the middle of every gap between stacked panels. */
+  function layStrands() {
+    const rows = new Set<number>();
+    const fadeAt = (row: number) => Math.min(1, (row * CELL_H) / bottom);
+    for (let row = 1; row * CELL_H < bottom; row += STRAND_MIN + Math.floor(hash(row, 7) * STRAND_SPREAD + fadeAt(row) * STRAND_FADE)) rows.add(row);
+    const sorted = [...boxes].sort((a, b) => a.top - b.top);
+    for (let k = 1; k < sorted.length; k++) {
+      const gap = sorted[k].top - sorted[k - 1].bottom;
+      if (gap < CELL_H) continue;
+      const row = Math.floor((sorted[k - 1].bottom + gap / 2) / CELL_H);
+      for (const near of [row - 2, row - 1, row + 1, row + 2]) rows.delete(near);
+      rows.add(row);
+    }
+    let text = 0;
+    strands = [...rows].sort((a, b) => a - b).map((row) => {
+      const fade = fadeAt(row);
+      // Lower strands carry fewer, shorter and thinner bodies.
+      return {
+        y: row * CELL_H + CELL_H / 2,
+        fade,
+        frame: [],
+        bodies: Array.from({ length: 1 + Math.floor((1 + hash(row, 3) * 3) * (1 - 0.8 * fade)) }, (_, b) => ({
+          phase: hash(row, b + 11) * 4000,
+          speed: 28 + hash(row, b + 19) * 46,
+          length: (110 + hash(row, b + 23) * 300) * (1 - 0.5 * fade),
+          rows: Math.floor(hash(row, b + 29) * (BODY_ROWS + 1) * (1 - 0.7 * fade)),
+          text: hash(row, b + 31) < 0.8 ? TEXTS[text++ % TEXTS.length] : undefined,
+        })),
+      };
+    });
+  }
 
   function measure() {
     const origin = canvas.getBoundingClientRect();
@@ -104,9 +132,11 @@ export function startAsciiField(canvas: HTMLCanvasElement, workspace: HTMLElemen
     canvas.width = Math.round(width * dpr);
     canvas.height = Math.round(height * dpr);
     ctx!.setTransform(dpr, 0, 0, dpr, 0, 0);
-    [map, detail, chat] = panels.map((panel) => relative(panel!, origin));
-    // Stacked panels (narrow screens) turn the flow from left-to-right into top-to-bottom.
-    vertical = chat.top >= detail.bottom - 1;
+    boxes = panels.map((panel) => relative(panel!, origin));
+    covered = boxes.slice(0, 1);
+    // The field ends one row below the lowest panel.
+    bottom = Math.min(height, Math.max(...boxes.map((box) => box.bottom)) + CELL_H);
+    layStrands();
   }
 
   const ramp = (v: number, cap = RAMP.length - 1): Cell => {
@@ -114,106 +144,65 @@ export function startAsciiField(canvas: HTMLCanvasElement, workspace: HTMLElemen
     return index < 1 ? undefined : [RAMP[index], paperTones[index - 1]];
   };
 
-  /**
-   * A funnel in flow space (`a` along the flow, `b` across it): from [from0, from1] at a0 to [to0, to1] at a1,
-   * filled edge to edge, denser where it is narrow; `hot` is a line across the flow that runs denser still.
-   */
-  function funnel(a: number, b: number, a0: number, a1: number, from: [number, number], to: [number, number], t: number, hot?: number): Cell {
-    const e = smoothstep(0, 1, (a - a0) / (a1 - a0));
-    const top = from[0] + (to[0] - from[0]) * e;
-    const bottom = from[1] + (to[1] - from[1]) * e;
-    if (b < top || b >= bottom) return undefined;
-    const s = (b - top) / (bottom - top);
-    // Streaks follow the funnel's walls because they are sampled on `s`, not on `b`.
-    const streak = smoothstep(0.25, 0.85, noise(a * 0.025 - t * 1.3, s * 22));
-    let v = (0.18 + 0.3 * e) + (0.3 + 0.25 * e) * streak;
-    // Packets run along the streaks across the whole funnel, so the wide part moves as much as the narrow one.
-    const packet = noise(a * 0.07 - t * 3.2, s * 22 + 50);
-    if (packet > 0.74) v += 0.5 * smoothstep(0.74, 0.9, packet);
-    if (hot !== undefined) {
-      const h = (hot - top) / (bottom - top);
-      v += 0.6 * e * Math.exp(-(((s - h) / 0.07) ** 2));
+  /** One cell against the strands within reach of its row: the strongest body wins; a body's text rides just behind it. */
+  function strandCell(x: number, y: number, near: Strand[], t: number): Cell {
+    let v = 0;
+    for (const strand of near) {
+      let text: string | undefined;
+      const dy = Math.round((y - strand.y) / CELL_H);
+      // The strand itself: a sparse dotted line across the band.
+      if (dy === 0 && noise(x * 0.04 - t * 0.6, strand.y) > 0.3 + 0.45 * strand.fade) v = Math.max(v, 0.12);
+      strand.bodies.forEach((body, b) => {
+        if (Math.abs(dy) > body.rows) return;
+        const { centre, textStart } = strand.frame[b];
+        if (dy === 0 && body.text && textStart !== undefined) {
+          const col = Math.floor((x - textStart) / CELL_W);
+          if (col >= 0 && col < body.text.length) text = body.text[col];
+        }
+        // Rows off the strand are shorter, so a body tapers like a stroke.
+        const dx = ((x - centre) / body.length) * (1 + 0.7 * Math.abs(dy));
+        if (Math.abs(dx) > 1.4) return;
+        const along = Math.exp(-3 * dx * dx) + (dx < 0 && dy === 0 ? 0.25 : 0);
+        const across = Math.exp(-(dy * dy) / ((body.rows + 0.5) ** 2));
+        v = Math.max(v, along * across * (0.75 + 0.35 * noise(x * 0.1 - t * 2, strand.y + dy)));
+      });
+      if (text !== undefined) return text === ' ' ? undefined : [text, glyph4, true];
     }
     return ramp(v);
   }
 
-  /** A gap between panels one or two rows deep: a row of pipeline code over a row of packets. */
-  function channel(a: number, b: number, top: number, bottom: number, t: number, phase: number): Cell {
-    const rows = Math.max(1, Math.round((bottom - top) / CELL_H));
-    const row = Math.floor((b - top) / CELL_H);
-    if (row === 0 || rows === 1) {
-      const char = scroll(CODE[phase % CODE.length], a / CELL_W, t, 8);
-      if (char !== undefined) return char === ' ' ? undefined : [char, glyph4, true];
+  /** Places every body for this frame; a body's text is left out while it would run into text already placed on its strand. */
+  function placeBodies(t: number) {
+    for (const strand of strands) {
+      const taken: [number, number][] = [];
+      strand.frame = strand.bodies.map((body) => {
+        const textWidth = (body.text?.length ?? 0) * CELL_W;
+        const centre = ((body.phase + t * body.speed) % (width + 2 * body.length + textWidth)) - body.length;
+        if (!body.text) return { centre };
+        const start = centre - body.length - textWidth;
+        // The span runs to the body's centre, so text never sits on another body either.
+        if (taken.some(([a, b]) => start < b && centre > a)) return { centre };
+        taken.push([start, centre]);
+        return { centre, textStart: start };
+      });
     }
-    const packet = noise(a * 0.03 - t * 2.2 + phase * 13, row * 3 + phase);
-    return packet > 0.72 ? ['#', deep] : ramp(0.35 + 0.5 * packet, 7);
-  }
-
-  /** A gap the width of a few cells running across the flow: packets converge on `mid`. */
-  function column(b: number, x: number, x0: number, x1: number, mid: number, t: number): Cell {
-    const packet = noise(Math.abs(b - mid) * 0.03 + t * 2, x * 0.1);
-    if (Math.abs(x - (x0 + x1) / 2) < CELL_W / 2) return packet > 0.7 ? ['#', deep] : [':', glyph4];
-    return ramp(0.2 + 0.5 * packet, 6);
-  }
-
-  /** Past the chat: the steps leave as straight rows while the funnel is wide, then the funnel takes them in. */
-  function steps(a: number, b: number, a0: number, a1: number, lineTop: number, lineBottom: number, t: number): Cell {
-    if ((a - a0) / (a1 - a0) > 0.45) return undefined;
-    for (let k = 0; k < STEPS.length; k++) {
-      const line = lineTop + ((k + 0.5) / STEPS.length) * (lineBottom - lineTop);
-      if (!onRow(b, line)) continue;
-      const char = scroll(STEPS[k], (a - a0) / CELL_W, t, 5 + k);
-      if (char !== undefined) return char === ' ' ? undefined : [char, k % 3 === 0 ? glyph4 : glyph3, true];
-    }
-    return undefined;
-  }
-
-  function horizontalCell(x: number, y: number, t: number): Cell {
-    const gapMid = (map.bottom + detail.top) / 2;
-    if (x < map.left) {
-      const reach = (detail.bottom - map.top) * IN_REACH;
-      return funnel(x, y, 0, map.left, [Math.max(0, map.top - reach), Math.min(height, detail.bottom + reach)], [map.top, detail.bottom], t, gapMid);
-    }
-    if (x < map.right) return y >= map.bottom && y < detail.top ? channel(x, y, map.bottom, detail.top, t, 0) : undefined;
-    if (x < chat.left) return y >= map.top && y < detail.bottom ? column(y, x, map.right, chat.left, gapMid, t) : undefined;
-    if (x < chat.right) return undefined;
-    const mid = (chat.top + chat.bottom) / 2;
-    const band = ((chat.bottom - chat.top) * OUT_BAND) / 2;
-    const end = width;
-    return steps(x, y, chat.right, end, chat.top, chat.bottom, t)
-      ?? funnel(x, y, chat.right, end, [chat.top, chat.bottom], [mid - band, mid + band], t, mid);
-  }
-
-  function verticalCell(x: number, y: number, t: number): Cell {
-    if (y < map.top) return funnel(y, x, 0, map.top, [0, width], [map.left, map.right], t);
-    if (y >= map.bottom && y < detail.top) return channel(x, y, map.bottom, detail.top, t, 0);
-    if (y >= detail.bottom && y < chat.top) return channel(x, y, detail.bottom, chat.top, t, 2);
-    if (y < chat.bottom) {
-      if (x < map.left) return column(y, x, 0, map.left, (map.top + chat.bottom) / 2, t);
-      if (x >= map.right) return column(y, x, map.right, width, (map.top + chat.bottom) / 2, t);
-      return undefined;
-    }
-    const mid = (chat.left + chat.right) / 2;
-    const band = ((chat.right - chat.left) * OUT_BAND) / 2;
-    return funnel(y, x, chat.bottom, height, [0, width], [mid - band, mid + band], t, mid);
   }
 
   function draw(t: number) {
     ctx!.clearRect(0, 0, width, height);
     ctx!.textBaseline = 'middle';
+    placeBodies(t);
     const symbols: [number, number, string, string][] = [];
     const code: [number, number, string, string][] = [];
-    for (let y = CELL_H / 2; y < height; y += CELL_H) {
+    for (let y = CELL_H / 2; y < bottom; y += CELL_H) {
+      const near = strands.filter((strand) => Math.abs(strand.y - y) <= BODY_ROWS * CELL_H);
       for (let x = CELL_W / 2; x < width; x += CELL_W) {
-        if (inside(map, x, y) || inside(detail, x, y) || inside(chat, x, y)) continue;
-        let cell = vertical ? verticalCell(x, y, t) : horizontalCell(x, y, t);
-        if (pointer) {
+        if (covered.some((box) => inside(box, x, y))) continue;
+        let cell = near.length ? strandCell(x, y, near, t) : undefined;
+        if (pointer && !cell?.[2]) {
           const dist = Math.hypot(x - pointer.x, y - pointer.y);
           // The lens gathers the ramp under the pointer; code and steps keep their letters.
-          if (dist < LENS_PX && !cell?.[2]) {
-            const index = cell ? RAMP.indexOf(cell[0]) : 0;
-            if (cell || vertical || x < map.left || x >= chat.right) cell = ramp(index / RAMP.length + 0.35 * (1 - dist / LENS_PX));
-          }
+          if (dist < LENS_PX) cell = ramp((cell ? RAMP.indexOf(cell[0]) / RAMP.length : 0) + 0.35 * (1 - dist / LENS_PX));
         }
         if (cell) (cell[2] ? code : symbols).push([x - CELL_W / 2, y, cell[0], cell[1]]);
       }

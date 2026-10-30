@@ -1,7 +1,7 @@
 /* Hallmark · shape: app screen · genre: modern-minimal · theme: Cobalt (by request) · redesign: full
- * nav: a hairline bar, the wordmark left and the pages as keys on a sunken tray at the right · signature: the ASCII field, its code in bold over lighter symbols, traffic narrowing from the page edge into the gaps between three panels, pipeline code in the gaps and model steps narrowing out past the chat · states: map loading, waiting (no key), failed, loaded; details empty; chat empty; blog empty
+ * nav: a hairline bar, the wordmark left and the pages as keys on a sunken tray at the right · signature: the ASCII field, sparse strands crossing behind the panels, pipeline code and assistant steps in bold over lighter symbols · states: map loading, waiting (no key), failed, loaded; details empty; chat empty; blog empty
  * axes: light/grotesk-sans/cool · posture: restrained · contrast: pass · copy: verbatim (pinned by tests/pages.test.mjs) · v2.0.0 */
-/* Hallmark · pre-emit critique: P4 H4 E4 S4 R4 V5 · weakest: R, the field surrounds a live map; the panels cover it whole, so it runs only in the gutters and the gaps, never over the tiles or the chat */
+/* Hallmark · pre-emit critique: P4 H4 E4 S4 R4 V5 · weakest: R, the field surrounds a live map; the panels cover it whole and it stops one row below them, so it shows only as thin strands in the gutters and the gaps */
 /* Hallmark · waive 75 · the 10px links and buttons are inside the Google map canvas · the map attribution is drawn by the Google SDK, not by this page */
 /* Hallmark · waive 39b · the 14px button is the keyboard shortcuts control of the Google map · the Google SDK sizes its own controls over the map data, and they load with it */
 /* Hallmark · answered F1 · the map error line keeps its straight apostrophe because tests/pages.test.mjs matches it verbatim */
@@ -34,6 +34,18 @@
   /* The gaps between panels are whole field cells, so a channel of glyphs runs through each. */
   --lab-gap-x: calc(3 * var(--cell-w));
   --lab-gap-y: calc(2 * var(--cell-h));
+  /* The panels' corners: one small radius, no cuts. */
+  --lab-radius: 6px;
+  /* The details' and chat's glass: cool paper at two strengths, a rim lit from the top left, a sheen that follows the pointer. */
+  --color-glass-hi: oklch(98.6% 0.005 250 / 0.66);
+  --color-glass-lo: oklch(96.2% 0.008 252 / 0.48);
+  --color-glass-edge: oklch(83% 0.012 252 / 0.7);
+  --color-glass-rim-light: oklch(100% 0 0 / 0.8);
+  --color-glass-rim-dark: oklch(70% 0.03 256 / 0.3);
+  --color-glass-sheen: oklch(100% 0 0 / 0.4);
+  --glass-blur: 5px;
+  --glass-sheen-size: 140px;
+  --glass-grain-opacity: 0.06;
 }
 
 :root[data-has-sidebar] { --sl-content-width: 48rem; }
@@ -168,7 +180,7 @@ select:focus-visible {
   pointer-events: none;
 }
 
-/* Workspace: three cut panels, map over details on the left and the chat beside them; the gaps carry the field. */
+/* Workspace: three panels, map over details on the left and the chat beside them; the gaps carry the field. */
 .workspace {
   display: grid;
   grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
@@ -186,40 +198,12 @@ select:focus-visible {
   min-height: 0;
   overflow: hidden;
   border: var(--rule-hair) solid var(--color-rule-2);
-  border-radius: var(--radius-card);
+  border-radius: var(--lab-radius);
   box-shadow: var(--shadow-card);
-}
-
-@supports (corner-shape: bevel) {
-  .map-panel,
-  .detail-panel,
-  .chat-panel {
-    border-radius: var(--cut-l) 4px var(--cut-l) 4px;
-    corner-shape: bevel round bevel round;
-  }
 }
 
 .map-panel { grid-column: 1; grid-row: 1; background: var(--color-paper-2); }
 .map-canvas { width: 100%; height: 100%; }
-
-/* Details: plain paper under the map; its one line sits above the field. */
-.detail-panel {
-  display: grid;
-  grid-column: 1;
-  grid-row: 2;
-  place-items: center;
-  padding: var(--space-lg);
-  background: var(--color-paper);
-}
-
-.detail-panel p {
-  position: relative;
-  z-index: var(--z-dropdown);
-  color: var(--color-muted);
-  font-family: var(--font-display);
-  font-size: var(--text-sm);
-  font-weight: 500;
-}
 
 .map-loading,
 .map-error {
@@ -255,24 +239,65 @@ select:focus-visible {
 .map-error-nodes { fill: var(--color-ink); }
 .map-error-loose { fill: var(--color-accent); }
 
-/* Chat panel: the graphite material; its one line sits above the field, a label on the middle channel. */
+/* Details and chat: frosted glass over the field. They sit above the canvas, so the strands pass under them blurred;
+ * the glass stays mostly opaque so the text they will hold reads first. */
+.detail-panel,
 .chat-panel {
+  z-index: calc(var(--z-raised) + 1);
   display: grid;
   place-items: center;
-  grid-column: 2;
-  grid-row: 1 / span 2;
   padding: var(--space-lg);
-  border-color: var(--color-graphite);
-  background: var(--color-graphite);
-  color: var(--color-graphite-ink);
+  border-color: var(--color-glass-edge);
+  background: linear-gradient(160deg, var(--color-glass-hi), var(--color-glass-lo));
+  box-shadow: inset 1px 1px 0 var(--color-glass-rim-light), inset -1px -1px 0 var(--color-glass-rim-dark), var(--shadow-card);
+  color: var(--color-ink);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(1.4);
+  backdrop-filter: blur(var(--glass-blur)) saturate(1.4);
 }
 
+.detail-panel { grid-column: 1; grid-row: 2; }
+.chat-panel { grid-column: 2; grid-row: 1 / span 2; }
+
+/* Without backdrop blur the glass would show the strands sharp, so it turns solid paper instead. */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .detail-panel,
+  .chat-panel { background: var(--color-paper-2); }
+}
+
+/* The sheen: a soft light where the pointer is, set by Workspace.astro; hidden until the pointer arrives. */
+.detail-panel::before,
+.detail-panel::after,
+.chat-panel::before,
+.chat-panel::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.detail-panel::before,
+.chat-panel::before {
+  background: radial-gradient(var(--glass-sheen-size) circle at var(--glass-x, 50%) var(--glass-y, 0%), var(--color-glass-sheen), transparent 70%);
+  opacity: 0;
+  transition: opacity var(--dur-short) var(--ease-out);
+}
+
+.detail-panel[data-lit]::before,
+.chat-panel[data-lit]::before { opacity: 1; }
+
+/* A faint grain so the glass reads as a material, not a tint. */
+.detail-panel::after,
+.chat-panel::after {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  opacity: var(--glass-grain-opacity);
+  mix-blend-mode: soft-light;
+}
+
+.detail-panel p,
 .chat-panel p {
   position: relative;
-  z-index: var(--z-dropdown);
-  padding: var(--space-2xs) var(--space-xs);
-  background: var(--color-graphite);
-  color: var(--color-graphite-ink);
+  z-index: var(--z-base);
+  color: var(--color-ink-2);
   font-family: var(--font-display);
   font-size: var(--text-sm);
   font-weight: 500;
@@ -287,7 +312,9 @@ select:focus-visible {
   .map-pulse { animation: none; }
   header.header,
   .site-navigation a,
-  .site-profile { transition: none; }
+  .site-profile,
+  .detail-panel::before,
+  .chat-panel::before { transition: none; }
 }
 
 /* Blog pages: the title clears the header; the current sidebar link sits on the cobalt wash. */
