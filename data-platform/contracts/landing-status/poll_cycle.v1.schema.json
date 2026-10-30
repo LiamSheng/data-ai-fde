@@ -1,0 +1,192 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "landing-status/poll_cycle.v1.schema.json",
+  "title": "Poll cycle record v1",
+  "description": "One immutable record per collector execution, written by poller.main after every requested feed has been attempted. Stored in the private Landing bucket at audit/poll_cycles/dt=<UTC date>/<completed_at compact>_<poll_cycle_id>.json, create-only.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "poll_cycle_id",
+    "started_at_utc",
+    "completed_at_utc",
+    "requested_feeds",
+    "execution_name",
+    "collector_revision",
+    "feeds"
+  ],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "poll_cycle_id": { "$ref": "#/$defs/hex32" },
+    "started_at_utc": {
+      "$ref": "#/$defs/utc_timestamp",
+      "description": "When poller.main started, before the first feed."
+    },
+    "completed_at_utc": {
+      "$ref": "#/$defs/utc_timestamp",
+      "description": "After the last requested feed, before this record is written. Also the time in the object name."
+    },
+    "requested_feeds": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/feed_type" },
+      "minItems": 1,
+      "uniqueItems": true,
+      "description": "Feeds this execution was asked to capture, in capture order. The feeds array matches it one to one, in the same order."
+    },
+    "execution_name": {
+      "type": ["string", "null"],
+      "minLength": 1,
+      "description": "Cloud Run execution name from the injected environment; null outside Cloud Run."
+    },
+    "collector_revision": {
+      "oneOf": [
+        { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+        { "type": "null" }
+      ],
+      "description": "Git commit the collector image was built from; null in local runs."
+    },
+    "feeds": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/feed_attempt" },
+      "minItems": 1
+    }
+  },
+  "$defs": {
+    "hex32": { "type": "string", "pattern": "^[0-9a-f]{32}$" },
+    "utc_timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,6})?Z$",
+      "description": "RFC 3339 in UTC with a trailing Z. Fractional seconds are optional (Python isoformat omits them on whole seconds)."
+    },
+    "nullable_utc_timestamp": {
+      "oneOf": [{ "$ref": "#/$defs/utc_timestamp" }, { "type": "null" }]
+    },
+    "feed_type": {
+      "enum": ["vehicle_positions", "trip_updates", "service_alerts"]
+    },
+    "outcome": {
+      "enum": [
+        "success",
+        "config_error",
+        "http_error",
+        "timeout",
+        "invalid_protobuf",
+        "feed_metadata_error",
+        "feed_content_error",
+        "transport_error",
+        "storage_error",
+        "other_error"
+      ]
+    },
+    "error_category": {
+      "enum": [
+        "configuration",
+        "authentication",
+        "http_client",
+        "http_server",
+        "timeout",
+        "invalid_protobuf",
+        "feed_metadata",
+        "feed_content",
+        "transport",
+        "storage",
+        "other"
+      ]
+    },
+    "feed_attempt": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "One capture attempt as the collector held it in memory. With audit_status 'failed' the values are secondary evidence: no audit file backs them, and no audit file is written afterwards.",
+      "required": [
+        "feed_type",
+        "attempt_id",
+        "audit_status",
+        "audit_ref",
+        "attempt_started_at_utc",
+        "attempt_completed_at_utc",
+        "outcome",
+        "error_category",
+        "http_status",
+        "payload_ref",
+        "payload_sha256",
+        "feed_timestamp",
+        "feed_age_seconds",
+        "entity_count"
+      ],
+      "properties": {
+        "feed_type": { "$ref": "#/$defs/feed_type" },
+        "attempt_id": { "$ref": "#/$defs/hex32" },
+        "audit_status": { "enum": ["written", "failed"] },
+        "audit_ref": {
+          "oneOf": [
+            { "type": "string", "pattern": "^audit/capture_attempts/[0-9a-f]{32}\\.json$" },
+            { "type": "null" }
+          ]
+        },
+        "attempt_started_at_utc": { "$ref": "#/$defs/utc_timestamp" },
+        "attempt_completed_at_utc": { "$ref": "#/$defs/nullable_utc_timestamp" },
+        "outcome": {
+          "oneOf": [{ "$ref": "#/$defs/outcome" }, { "type": "null" }]
+        },
+        "error_category": {
+          "oneOf": [{ "$ref": "#/$defs/error_category" }, { "type": "null" }]
+        },
+        "http_status": {
+          "oneOf": [{ "type": "integer", "minimum": 100, "maximum": 599 }, { "type": "null" }]
+        },
+        "payload_ref": {
+          "oneOf": [
+            {
+              "type": "string",
+              "pattern": "^(vehicle_positions|trip_updates|service_alerts)/[0-9a-f]{2}/[0-9a-f]{64}\\.pb$"
+            },
+            { "type": "null" }
+          ]
+        },
+        "payload_sha256": {
+          "oneOf": [{ "type": "string", "pattern": "^[0-9a-f]{64}$" }, { "type": "null" }]
+        },
+        "feed_timestamp": { "$ref": "#/$defs/nullable_utc_timestamp" },
+        "feed_age_seconds": { "type": ["number", "null"] },
+        "entity_count": {
+          "oneOf": [{ "type": "integer", "minimum": 0 }, { "type": "null" }]
+        }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "audit_status": { "const": "written" } } },
+          "then": {
+            "properties": {
+              "audit_ref": { "type": "string" },
+              "attempt_completed_at_utc": { "type": "string" },
+              "outcome": { "type": "string" }
+            }
+          },
+          "else": { "properties": { "audit_ref": { "type": "null" } } }
+        },
+        {
+          "if": { "properties": { "outcome": { "const": "success" } }, "required": ["outcome"] },
+          "then": {
+            "properties": {
+              "error_category": { "type": "null" },
+              "http_status": { "type": "integer", "minimum": 200, "maximum": 299 },
+              "payload_ref": { "type": "string" },
+              "payload_sha256": { "type": "string" },
+              "feed_timestamp": { "type": "string" },
+              "feed_age_seconds": { "type": "number" },
+              "entity_count": { "type": "integer" }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": { "outcome": { "type": "string", "not": { "const": "success" } } },
+            "required": ["outcome"]
+          },
+          "then": { "properties": { "error_category": { "type": "string" } } }
+        }
+      ]
+    }
+  }
+}

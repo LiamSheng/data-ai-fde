@@ -1,0 +1,63 @@
+{
+  "schema_version": 1,
+  "poll_cycle_id": "370741706b885eea58a479febe539483",
+  "started_at_utc": "2026-10-30T18:10:01.204417Z",
+  "completed_at_utc": "2026-10-30T18:10:30.076332Z",
+  "requested_feeds": [
+    "vehicle_positions",
+    "trip_updates",
+    "service_alerts"
+  ],
+  "execution_name": "gtfs-rt-collector-9c0ab",
+  "collector_revision": "2b214ddf3326016519afcb268f63623b80b91a65",
+  "feeds": [
+    {
+      "feed_type": "vehicle_positions",
+      "attempt_id": "cf327c3387e1e57697845b05f538f3d7",
+      "audit_status": "written",
+      "audit_ref": "audit/capture_attempts/cf327c3387e1e57697845b05f538f3d7.json",
+      "attempt_started_at_utc": "2026-10-30T18:10:01.204417Z",
+      "attempt_completed_at_utc": "2026-10-30T18:10:10.616722Z",
+      "outcome": "success",
+      "error_category": null,
+      "http_status": 200,
+      "payload_ref": "vehicle_positions/2d/2d6250c46c07fd8c754bf7c7115e370d23821e8c4670de611494e1b9ac837194.pb",
+      "payload_sha256": "2d6250c46c07fd8c754bf7c7115e370d23821e8c4670de611494e1b9ac837194",
+      "feed_timestamp": "2026-10-30T18:09:52Z",
+      "feed_age_seconds": 18.617,
+      "entity_count": 1214
+    },
+    {
+      "feed_type": "trip_updates",
+      "attempt_id": "83fc041cbfebe6272618e099eac1ad9e",
+      "audit_status": "written",
+      "audit_ref": "audit/capture_attempts/83fc041cbfebe6272618e099eac1ad9e.json",
+      "attempt_started_at_utc": "2026-10-30T18:10:10.796722Z",
+      "attempt_completed_at_utc": "2026-10-30T18:10:20.209027Z",
+      "outcome": "success",
+      "error_category": null,
+      "http_status": 200,
+      "payload_ref": "trip_updates/a7/a77ad0e3c457464ec35d8b6513b7df5335dc7dadf53ddec1451f0717f9d0d432.pb",
+      "payload_sha256": "a77ad0e3c457464ec35d8b6513b7df5335dc7dadf53ddec1451f0717f9d0d432",
+      "feed_timestamp": "2026-10-30T18:10:02Z",
+      "feed_age_seconds": 18.209,
+      "entity_count": 1530
+    },
+    {
+      "feed_type": "service_alerts",
+      "attempt_id": "a23f28995e0294b78a540cbfd6f414d8",
+      "audit_status": "written",
+      "audit_ref": "audit/capture_attempts/a23f28995e0294b78a540cbfd6f414d8.json",
+      "attempt_started_at_utc": "2026-10-30T18:10:20.389027Z",
+      "attempt_completed_at_utc": "2026-10-30T18:10:29.801332Z",
+      "outcome": "success",
+      "error_category": null,
+      "http_status": 200,
+      "payload_ref": "service_alerts/e0/e064011aa5d3741343c8d25549377b733d154838777bcf3e42787bfbc32031c9.pb",
+      "payload_sha256": "e064011aa5d3741343c8d25549377b733d154838777bcf3e42787bfbc32031c9",
+      "feed_timestamp": "2026-10-30T18:10:11Z",
+      "feed_age_seconds": 18.801,
+      "entity_count": 87
+    }
+  ]
+}

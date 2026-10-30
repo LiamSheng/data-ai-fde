@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "poll_cycle_id": "b5a1d973d9e1bc35d05622a103a79875",
+  "started_at_utc": "2026-10-30T18:30:01.770213Z",
+  "completed_at_utc": "2026-10-30T18:30:21.049823Z",
+  "requested_feeds": [
+    "vehicle_positions",
+    "trip_updates"
+  ],
+  "execution_name": "gtfs-rt-collector-0012a",
+  "collector_revision": "2b214ddf3326016519afcb268f63623b80b91a65",
+  "feeds": [
+    {
+      "feed_type": "vehicle_positions",
+      "attempt_id": "f809fd54fe4e9ce744bbace13d9d8ca1",
+      "audit_status": "written",
+      "audit_ref": "audit/capture_attempts/f809fd54fe4e9ce744bbace13d9d8ca1.json",
+      "attempt_started_at_utc": "2026-10-30T18:30:01.770213Z",
+      "attempt_completed_at_utc": "2026-10-30T18:30:11.182518Z",
+      "outcome": "success",
+      "error_category": null,
+      "http_status": 200,
+      "payload_ref": "vehicle_positions/52/52017531593c058888f11beec32101fbc244e0c8e1ba1720d130a499252fb030.pb",
+      "payload_sha256": "52017531593c058888f11beec32101fbc244e0c8e1ba1720d130a499252fb030",
+      "feed_timestamp": "2026-10-30T18:29:53Z",
+      "feed_age_seconds": 18.183,
+      "entity_count": 1214
+    },
+    {
+      "feed_type": "trip_updates",
+      "attempt_id": "21a3d553cb1f0832e157311c30d91fdf",
+      "audit_status": "written",
+      "audit_ref": "audit/capture_attempts/21a3d553cb1f0832e157311c30d91fdf.json",
+      "attempt_started_at_utc": "2026-10-30T18:30:11.362518Z",
+      "attempt_completed_at_utc": "2026-10-30T18:30:20.774823Z",
+      "outcome": "success",
+      "error_category": null,
+      "http_status": 200,
+      "payload_ref": "trip_updates/b2/b2cd4d0ef99ea57e7f4a8e236798da95a116a1e8a1a185c42aea8da8930a85cc.pb",
+      "payload_sha256": "b2cd4d0ef99ea57e7f4a8e236798da95a116a1e8a1a185c42aea8da8930a85cc",
+      "feed_timestamp": "2026-10-30T18:30:02Z",
+      "feed_age_seconds": 18.775,
+      "entity_count": 1530
+    }
+  ]
+}
