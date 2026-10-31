@@ -19,6 +19,8 @@ RUN uv sync --locked --no-dev --no-editable
 FROM builder AS checks
 RUN uv sync --locked --group dev --no-editable
 COPY tests/ ./tests/
+# The contract tests read the schemas and examples; the runtime image does not.
+COPY contracts/ ./contracts/
 COPY scripts/check_ci.py ./scripts/check_ci.py
 COPY scripts/verify_gcs_repeat.py ./scripts/verify_gcs_repeat.py
 ENV PATH="/app/.venv/bin:$PATH" \

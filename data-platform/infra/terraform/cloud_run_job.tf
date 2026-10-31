@@ -1,6 +1,9 @@
 locals {
-  # 来自首次成功构建的结果。后续发布必须审核新的 digest，不使用 latest。
-  collector_image_digest = "sha256:c2cdf1da61ad52e79735e93618abf18683b075d87350132b24052e31cb4b5f0e"
+  # 后续发布必须审核新的 digest，不使用 latest。
+  # 2026-10-31 KAN-25：Cloud Build 7593f164，源码 f84aeab（周期记录与 latest.json）；
+  # 云端离线检查 118 通过、5 个允许的快照跳过，运行时导入冒烟通过。
+  # 上一版：sha256:c2cdf1da61ad52e79735e93618abf18683b075d87350132b24052e31cb4b5f0e
+  collector_image_digest = "sha256:fdc699d3258a1b43446376ba5e1edb9381e65b7180c4a4aab0218b5370f0344b"
   collector_image        = "${google_artifact_registry_repository.collector_images.location}-docker.pkg.dev/${google_artifact_registry_repository.collector_images.project}/${google_artifact_registry_repository.collector_images.repository_id}/collector@${local.collector_image_digest}"
 }
 
@@ -52,6 +55,12 @@ resource "google_cloud_run_v2_job" "gtfs_rt_collector" {
           value = google_storage_bucket.gtfs_rt_landing.name
         }
 
+        # latest.json 写入单独的 status bucket；未设置时 collector 只跳过它，采集照常。
+        env {
+          name  = "GTFS_RT_STATUS_BUCKET"
+          value = google_storage_bucket.gtfs_rt_status.name
+        }
+
         # 三个公开、无凭据的地址属于来源配置；工程资源名称仍供应方无关。
         env {
           name  = "GTFS_RT_VEHICLE_POSITIONS_URL"
@@ -84,11 +93,12 @@ resource "google_cloud_run_v2_job" "gtfs_rt_collector" {
   }
 
   # 资源引用提供身份/桶/镜像仓库依赖；IAM 授权仍须显式先完成。
-  # 不新增 collector 权限，也不把 builder 作为运行身份。
+  # 不把 builder 作为运行身份。KAN-25 新增的唯一 collector 权限是 status bucket 上的 objectUser。
   depends_on = [
     google_project_service.cloud_run,
     google_project_service.cloud_logging,
     google_storage_bucket_iam_member.collector_object_creator,
+    google_storage_bucket_iam_member.collector_status_object_user,
     google_secret_manager_secret_iam_member.collector_secret_accessor,
   ]
 }
