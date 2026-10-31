@@ -10,6 +10,12 @@
 !src/
 !src/transit_realtime_pipeline/
 !src/transit_realtime_pipeline/*.py
+# Contract schemas and examples, read by tests/test_landing_status.py.
+!contracts/
+!contracts/landing-status/
+!contracts/landing-status/*.json
+!contracts/landing-status/examples/
+!contracts/landing-status/examples/*.json
 !tests/
 !tests/test_*.py
 !scripts/
