@@ -1,0 +1,66 @@
+{
+  "schema_version": 1,
+  "generated_at_utc": "2026-10-30T18:00:41.044522Z",
+  "stale_after_utc": "2026-10-30T18:20:41.044522Z",
+  "poll_cycle_id": "44426636ecb4bc427ad088f707b78b03",
+  "cycle_ref": "audit/poll_cycles/dt=2026-10-30/20261030T180041Z_44426636ecb4bc427ad088f707b78b03.json",
+  "feeds": {
+    "vehicle_positions": {
+      "last_attempt": {
+        "poll_cycle_id": "44426636ecb4bc427ad088f707b78b03",
+        "cycle_completed_at_utc": "2026-10-30T18:00:41.044522Z",
+        "attempt_id": "828cf6ce91550851395f328467aba8dd",
+        "audit_status": "written",
+        "attempt_completed_at_utc": "2026-10-30T18:00:10.994100Z",
+        "outcome": "success",
+        "error_category": null,
+        "http_status": 200,
+        "feed_timestamp": "2026-10-30T17:59:52Z",
+        "feed_age_seconds": 18.994,
+        "entity_count": 1214
+      },
+      "last_success_at_utc": "2026-10-30T18:00:10.994100Z",
+      "last_success_feed_timestamp": "2026-10-30T17:59:52Z",
+      "last_audit_failure_at_utc": null,
+      "last_audit_failure_poll_cycle_id": null
+    },
+    "trip_updates": {
+      "last_attempt": {
+        "poll_cycle_id": "44426636ecb4bc427ad088f707b78b03",
+        "cycle_completed_at_utc": "2026-10-30T18:00:41.044522Z",
+        "attempt_id": "22265aea846b68e6284f9a135fb52017",
+        "audit_status": "written",
+        "attempt_completed_at_utc": "2026-10-30T18:00:31.177217Z",
+        "outcome": "timeout",
+        "error_category": "timeout",
+        "http_status": null,
+        "feed_timestamp": null,
+        "feed_age_seconds": null,
+        "entity_count": null
+      },
+      "last_success_at_utc": null,
+      "last_success_feed_timestamp": null,
+      "last_audit_failure_at_utc": null,
+      "last_audit_failure_poll_cycle_id": null
+    },
+    "service_alerts": {
+      "last_attempt": {
+        "poll_cycle_id": "44426636ecb4bc427ad088f707b78b03",
+        "cycle_completed_at_utc": "2026-10-30T18:00:41.044522Z",
+        "attempt_id": "a9b25fa70bc85e306beac91d28bf8b5d",
+        "audit_status": "written",
+        "attempt_completed_at_utc": "2026-10-30T18:00:40.769522Z",
+        "outcome": "success",
+        "error_category": null,
+        "http_status": 200,
+        "feed_timestamp": "2026-10-30T18:00:22Z",
+        "feed_age_seconds": 18.77,
+        "entity_count": 87
+      },
+      "last_success_at_utc": "2026-10-30T18:00:40.769522Z",
+      "last_success_feed_timestamp": "2026-10-30T18:00:22Z",
+      "last_audit_failure_at_utc": null,
+      "last_audit_failure_poll_cycle_id": null
+    }
+  }
+}

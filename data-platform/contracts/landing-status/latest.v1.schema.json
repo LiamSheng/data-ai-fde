@@ -1,0 +1,179 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "landing-status/latest.v1.schema.json",
+  "title": "Landing status latest.json v1",
+  "description": "Current Landing status, overwritten by the collector after each poll cycle record (best-effort). Stored at landing/v1/latest.json in the public-read status bucket. Fully derivable from poll cycle records.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "generated_at_utc",
+    "stale_after_utc",
+    "poll_cycle_id",
+    "cycle_ref",
+    "feeds"
+  ],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "generated_at_utc": {
+      "$ref": "#/$defs/utc_timestamp",
+      "description": "completed_at_utc of the poll cycle that wrote this file (event time, not upload time)."
+    },
+    "stale_after_utc": {
+      "$ref": "#/$defs/utc_timestamp",
+      "description": "generated_at_utc + 1200 seconds (twice the longest poll interval)."
+    },
+    "poll_cycle_id": { "$ref": "#/$defs/hex32" },
+    "cycle_ref": {
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^audit/poll_cycles/dt=\\d{4}-\\d{2}-\\d{2}/\\d{8}T\\d{6}Z_[0-9a-f]{32}\\.json$"
+        },
+        { "type": "null" }
+      ],
+      "description": "Object name of the poll cycle record in the Landing bucket; null when that record could not be written."
+    },
+    "feeds": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["vehicle_positions", "trip_updates", "service_alerts"],
+      "properties": {
+        "vehicle_positions": { "$ref": "#/$defs/feed_status" },
+        "trip_updates": { "$ref": "#/$defs/feed_status" },
+        "service_alerts": { "$ref": "#/$defs/feed_status" }
+      }
+    }
+  },
+  "$defs": {
+    "hex32": { "type": "string", "pattern": "^[0-9a-f]{32}$" },
+    "utc_timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,6})?Z$"
+    },
+    "nullable_utc_timestamp": {
+      "oneOf": [{ "$ref": "#/$defs/utc_timestamp" }, { "type": "null" }]
+    },
+    "nullable_hex32": {
+      "oneOf": [{ "$ref": "#/$defs/hex32" }, { "type": "null" }]
+    },
+    "feed_status": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "last_attempt",
+        "last_success_at_utc",
+        "last_success_feed_timestamp",
+        "last_audit_failure_at_utc",
+        "last_audit_failure_poll_cycle_id"
+      ],
+      "properties": {
+        "last_attempt": {
+          "oneOf": [{ "$ref": "#/$defs/last_attempt" }, { "type": "null" }],
+          "description": "From this cycle if the feed was requested, otherwise carried over from the previous latest.json; null if the feed has never been attempted."
+        },
+        "last_success_at_utc": {
+          "$ref": "#/$defs/nullable_utc_timestamp",
+          "description": "attempt_completed_at_utc of the latest attempt with audit_status 'written' and outcome 'success'. Carried over when this cycle did not succeed."
+        },
+        "last_success_feed_timestamp": {
+          "$ref": "#/$defs/nullable_utc_timestamp",
+          "description": "Feed header timestamp of that successful attempt: how current the data is."
+        },
+        "last_audit_failure_at_utc": {
+          "$ref": "#/$defs/nullable_utc_timestamp",
+          "description": "completed_at_utc of the latest cycle in which this feed's audit could not be written. Carried over until a newer failure."
+        },
+        "last_audit_failure_poll_cycle_id": {
+          "$ref": "#/$defs/nullable_hex32",
+          "description": "The cycle to look up in the poll cycle records."
+        }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "last_success_at_utc": { "type": "string" } } },
+          "then": { "properties": { "last_success_feed_timestamp": { "type": "string" } } },
+          "else": { "properties": { "last_success_feed_timestamp": { "type": "null" } } }
+        },
+        {
+          "if": { "properties": { "last_audit_failure_at_utc": { "type": "string" } } },
+          "then": { "properties": { "last_audit_failure_poll_cycle_id": { "type": "string" } } },
+          "else": { "properties": { "last_audit_failure_poll_cycle_id": { "type": "null" } } }
+        }
+      ]
+    },
+    "last_attempt": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Public subset of a poll cycle feed attempt, plus the cycle it came from.",
+      "required": [
+        "poll_cycle_id",
+        "cycle_completed_at_utc",
+        "attempt_id",
+        "audit_status",
+        "attempt_completed_at_utc",
+        "outcome",
+        "error_category",
+        "http_status",
+        "feed_timestamp",
+        "feed_age_seconds",
+        "entity_count"
+      ],
+      "properties": {
+        "poll_cycle_id": { "$ref": "#/$defs/hex32" },
+        "cycle_completed_at_utc": { "$ref": "#/$defs/utc_timestamp" },
+        "attempt_id": { "$ref": "#/$defs/hex32" },
+        "audit_status": { "enum": ["written", "failed"] },
+        "attempt_completed_at_utc": { "$ref": "#/$defs/nullable_utc_timestamp" },
+        "outcome": {
+          "oneOf": [
+            {
+              "enum": [
+                "success",
+                "config_error",
+                "http_error",
+                "timeout",
+                "invalid_protobuf",
+                "feed_metadata_error",
+                "feed_content_error",
+                "transport_error",
+                "storage_error",
+                "other_error"
+              ]
+            },
+            { "type": "null" }
+          ]
+        },
+        "error_category": {
+          "oneOf": [
+            {
+              "enum": [
+                "configuration",
+                "authentication",
+                "http_client",
+                "http_server",
+                "timeout",
+                "invalid_protobuf",
+                "feed_metadata",
+                "feed_content",
+                "transport",
+                "storage",
+                "other"
+              ]
+            },
+            { "type": "null" }
+          ]
+        },
+        "http_status": {
+          "oneOf": [{ "type": "integer", "minimum": 100, "maximum": 599 }, { "type": "null" }]
+        },
+        "feed_timestamp": { "$ref": "#/$defs/nullable_utc_timestamp" },
+        "feed_age_seconds": { "type": ["number", "null"] },
+        "entity_count": {
+          "oneOf": [{ "type": "integer", "minimum": 0 }, { "type": "null" }]
+        }
+      }
+    }
+  }
+}

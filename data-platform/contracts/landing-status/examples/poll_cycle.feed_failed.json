@@ -1,0 +1,63 @@
+{
+  "schema_version": 1,
+  "poll_cycle_id": "44426636ecb4bc427ad088f707b78b03",
+  "started_at_utc": "2026-10-30T18:00:01.581795Z",
+  "completed_at_utc": "2026-10-30T18:00:41.044522Z",
+  "requested_feeds": [
+    "vehicle_positions",
+    "trip_updates",
+    "service_alerts"
+  ],
+  "execution_name": "gtfs-rt-collector-d0f63",
+  "collector_revision": "2b214ddf3326016519afcb268f63623b80b91a65",
+  "feeds": [
+    {
+      "feed_type": "vehicle_positions",
+      "attempt_id": "828cf6ce91550851395f328467aba8dd",
+      "audit_status": "written",
+      "audit_ref": "audit/capture_attempts/828cf6ce91550851395f328467aba8dd.json",
+      "attempt_started_at_utc": "2026-10-30T18:00:01.581795Z",
+      "attempt_completed_at_utc": "2026-10-30T18:00:10.994100Z",
+      "outcome": "success",
+      "error_category": null,
+      "http_status": 200,
+      "payload_ref": "vehicle_positions/8f/8f8e1a4ee7b068f122b1008dec081b3471f9c314cf178b6dc558025189fc1161.pb",
+      "payload_sha256": "8f8e1a4ee7b068f122b1008dec081b3471f9c314cf178b6dc558025189fc1161",
+      "feed_timestamp": "2026-10-30T17:59:52Z",
+      "feed_age_seconds": 18.994,
+      "entity_count": 1214
+    },
+    {
+      "feed_type": "trip_updates",
+      "attempt_id": "22265aea846b68e6284f9a135fb52017",
+      "audit_status": "written",
+      "audit_ref": "audit/capture_attempts/22265aea846b68e6284f9a135fb52017.json",
+      "attempt_started_at_utc": "2026-10-30T18:00:11.174100Z",
+      "attempt_completed_at_utc": "2026-10-30T18:00:31.177217Z",
+      "outcome": "timeout",
+      "error_category": "timeout",
+      "http_status": null,
+      "payload_ref": null,
+      "payload_sha256": null,
+      "feed_timestamp": null,
+      "feed_age_seconds": null,
+      "entity_count": null
+    },
+    {
+      "feed_type": "service_alerts",
+      "attempt_id": "a9b25fa70bc85e306beac91d28bf8b5d",
+      "audit_status": "written",
+      "audit_ref": "audit/capture_attempts/a9b25fa70bc85e306beac91d28bf8b5d.json",
+      "attempt_started_at_utc": "2026-10-30T18:00:31.357217Z",
+      "attempt_completed_at_utc": "2026-10-30T18:00:40.769522Z",
+      "outcome": "success",
+      "error_category": null,
+      "http_status": 200,
+      "payload_ref": "service_alerts/8c/8cd7079df40b7495412b45e011ec7bd447922e650660b0779cf097094927441c.pb",
+      "payload_sha256": "8cd7079df40b7495412b45e011ec7bd447922e650660b0779cf097094927441c",
+      "feed_timestamp": "2026-10-30T18:00:22Z",
+      "feed_age_seconds": 18.77,
+      "entity_count": 87
+    }
+  ]
+}
