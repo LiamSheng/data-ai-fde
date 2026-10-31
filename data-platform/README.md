@@ -58,9 +58,15 @@ uv run python -m transit_realtime_pipeline.poller
 ```
 
 Payloads go to `data/raw/gtfs_rt/<payload_ref>` (content-addressed) and one audit
-JSON per feed attempt to `data/ops/capture_attempts/`. `GTFS_RT_STORAGE_BACKEND=gcs`
-with `GTFS_RT_GCS_BUCKET` writes to GCS with create-only preconditions. URLs must
-not contain credentials or query strings; the key is never logged. On macOS,
+JSON per feed attempt to `data/ops/capture_attempts/`. After the feeds, one poll
+cycle record goes to `data/ops/poll_cycles/` and the latest status to
+`data/status/landing/v1/latest.json` (format: `contracts/landing-status/`).
+`GTFS_RT_STORAGE_BACKEND=gcs` with `GTFS_RT_GCS_BUCKET` writes payloads, audits and
+cycle records to GCS with create-only preconditions; `GTFS_RT_STATUS_BUCKET` names
+the separate bucket for `latest.json` (unset: the status is skipped and logged,
+capture is unaffected). `GTFS_RT_REQUESTED_FEEDS` (comma-separated, default all
+three) limits which feeds one execution captures. URLs must not contain
+credentials or query strings; the key is never logged. On macOS,
 `zsh scripts/poll_local.zsh` reads the key from the login Keychain.
 
 TransLink's published terms allow 1,000 requests per API key per day; three feeds

@@ -20,11 +20,17 @@ Local storage mode writes the same names under `data/ops/poll_cycles/` and
 2. Write the poll cycle record. The date directory and the time in the name
    come from `completed_at_utc`, so records list in time order within a day.
 3. Read the previous `latest.json`, derive the new one, and write it. If the
-   previous file is missing, unreadable or has an unknown `schema_version`,
-   start from empty. If the previous `generated_at_utc` is not older than this
-   cycle's `completed_at_utc`, do not write.
+   previous file is missing, malformed or has an unknown `schema_version`,
+   start from empty. If reading it fails (a storage error), skip this cycle's
+   write: starting from empty would erase the carried values. If the previous
+   `generated_at_utc` is not older than this cycle's `completed_at_utc`, do
+   not write.
 4. If step 2 failed, still do step 3 with `cycle_ref: null`: the two documents
    live in different buckets, so the page can still see the collector running.
+   If the record could not even be built, skip step 3 as well.
+
+Local storage mode maps the `audit/` prefix to `data/ops/`, so `audit_ref` and
+`cycle_ref` hold the same names in both modes.
 
 ## Rules
 
@@ -37,6 +43,9 @@ Local storage mode writes the same names under `data/ops/poll_cycles/` and
   `audit_status: "failed"` with `audit_ref: null`, and keeps `payload_ref` and
   `payload_sha256` so the payload saved before the audit can still be found.
   These values are secondary evidence. No audit file is written afterwards.
+  `failed` means the collector could not confirm the audit write, not that no
+  audit exists: uploads are not retried, so one that timed out may still have
+  landed. Readers must not treat a `failed` entry as proof of a missing audit.
 - **Success** means `audit_status: "written"` and `outcome: "success"`.
 - **`latest.json` is derived.** It can always be rebuilt from poll cycle
   records, so it never holds a fact the records do not.
@@ -48,9 +57,9 @@ Local storage mode writes the same names under `data/ops/poll_cycles/` and
   - `last_success_at_utc` / `last_success_feed_timestamp` and
     `last_audit_failure_at_utc` / `last_audit_failure_poll_cycle_id` are
     carried over until a newer success or audit failure replaces them.
-- **Rules a schema cannot express** (to be enforced when the collector builds
-  each record, in the record models' `__post_init__`, with tests; planned in
-  KAN-24, not implemented yet):
+- **Rules a schema cannot express** (enforced when the collector builds each
+  record, in the models' `__post_init__` in
+  `src/transit_realtime_pipeline/status.py`, one test each):
   `feeds` in a poll cycle record matches `requested_feeds` one to one and in
   order; `audit_ref` names the same `attempt_id`; `payload_ref` starts with the
   feed type and the first two characters of `payload_sha256`;
@@ -58,12 +67,10 @@ Local storage mode writes the same names under `data/ops/poll_cycles/` and
 
 ## Validation
 
-Status: planned in KAN-24. Today only the examples in this directory have
-been checked against the schemas; no collector code writes these documents yet.
-
-- **Tests**: the collector's tests validate every document it writes against
-  these schemas. `jsonschema` is a development dependency only and is not in
-  the runtime image.
+- **Tests** (`tests/test_landing_status.py`): every example and every document
+  the collector writes is validated against these schemas, and the latest
+  examples are re-derived from the cycle examples. `jsonschema` is a
+  development dependency only and is not in the runtime image.
 - **Runtime**: both documents are built from dataclasses whose `__post_init__`
   rejects contradictory values, as `CaptureAttempt` already does. A poll cycle
   record that fails this check is not written (exit code 3); a `latest.json`

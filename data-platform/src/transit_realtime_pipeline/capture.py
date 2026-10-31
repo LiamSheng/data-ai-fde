@@ -5,6 +5,7 @@ import json
 import os
 import sys
 import tempfile
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from functools import partial
 from pathlib import Path, PurePosixPath
@@ -16,6 +17,22 @@ from .config import FEED_TYPES, load_feed_config
 from .gtfs_rt import InvalidFeed, parse_feed
 from .models import CaptureAttempt, ErrorCategory, Outcome
 from .storage import CaptureStorage
+
+
+@dataclass(frozen=True, slots=True)
+class CaptureResult:
+    """One capture as poller.main needs it for the poll cycle record.
+
+    attempt is the record held in memory; it is None only when even that
+    could not be built. audit_written says whether its audit was persisted.
+    """
+
+    exit_code: int
+    feed_type: str
+    attempt_id: str
+    started_at_utc: datetime
+    attempt: CaptureAttempt | None
+    audit_written: bool
 
 
 def save_raw_payload(
@@ -103,7 +120,7 @@ def audit_failure(
     vehicle_count: int | None = None,
     trip_update_count: int | None = None,
     alert_count: int | None = None,
-) -> int:
+) -> CaptureResult:
     """Write a categorized failure without storing exception text or URL."""
     completed_at = datetime.now(UTC)
 
@@ -131,7 +148,12 @@ def audit_failure(
             trip_update_count=trip_update_count,
             alert_count=alert_count,
         )
+    except Exception:  # noqa: BLE001 - redact untrusted exception details
+        # Without a record there is nothing to audit or to keep in memory.
+        print("audit_unavailable", file=sys.stderr)
+        return CaptureResult(3, feed_type, attempt_id, started_at, None, False)
 
+    try:
         # Failures must use the same destination as successful captures.
         # Never silently fall back to local storage when GCS auditing fails.
         if storage is None:
@@ -143,8 +165,9 @@ def audit_failure(
     except Exception:  # noqa: BLE001 - redact untrusted exception details
         # The audit sink cannot record its own unavailability there.
         # Raw exception text could contain a credential, so do not print it.
+        # The poll cycle record keeps the in-memory attempt instead.
         print("audit_unavailable", file=sys.stderr)
-        return 3
+        return CaptureResult(3, feed_type, attempt_id, started_at, attempt, False)
 
     print(f"feed_type={feed_type}")
     print(f"attempt_id={attempt_id}")
@@ -155,7 +178,7 @@ def audit_failure(
         print(f"http_status={http_status}")
 
     print(f"attempt_record={record_ref}")
-    return exit_code
+    return CaptureResult(exit_code, feed_type, attempt_id, started_at, attempt, True)
 
 
 def capture_one(
@@ -164,6 +187,18 @@ def capture_one(
     poll_cycle_id: str | None = None,
     storage: CaptureStorage | None = None,
 ) -> int:
+    """Capture one feed and return only its exit code."""
+    return capture_feed(
+        feed_type, poll_cycle_id=poll_cycle_id, storage=storage
+    ).exit_code
+
+
+def capture_feed(
+    feed_type: str,
+    *,
+    poll_cycle_id: str | None = None,
+    storage: CaptureStorage | None = None,
+) -> CaptureResult:
     """Capture one feed with local persistence or an injected storage adapter."""
     # An attempt begins before source configuration validation.
     # Configuration failures therefore get an attempt even without HTTP.
@@ -489,9 +524,10 @@ def capture_one(
             record_ref = storage.write_attempt_record(attempt)
     except Exception:  # noqa: BLE001 - redact untrusted exception details
         # The payload may already exist, but audit persistence has failed.
-        # Do not report a successful capture or claim an audit record exists.
+        # Do not report a successful capture or claim an audit record exists;
+        # the poll cycle record keeps the in-memory attempt as secondary evidence.
         print("audit_unavailable", file=sys.stderr)
-        return 3
+        return CaptureResult(3, feed_type, attempt_id, started_at, attempt, False)
 
     print(f"feed_type={feed_type}")
     print(f"attempt_id={attempt_id}")
@@ -503,7 +539,7 @@ def capture_one(
     print(f"entity_count={metadata.entity_count}")
     print(f"feed_age_seconds={attempt.feed_age_seconds:.3f}")
     print(f"attempt_record={record_ref}")
-    return 0
+    return CaptureResult(0, feed_type, attempt_id, started_at, attempt, True)
 
 
 def main() -> int:

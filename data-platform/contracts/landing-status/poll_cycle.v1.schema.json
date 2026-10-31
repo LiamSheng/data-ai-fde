@@ -97,7 +97,7 @@
     "feed_attempt": {
       "type": "object",
       "additionalProperties": false,
-      "description": "One capture attempt as the collector held it in memory. With audit_status 'failed' the values are secondary evidence: no audit file backs them, and no audit file is written afterwards.",
+      "description": "One capture attempt as the collector held it in memory. With audit_status 'failed' the collector could not confirm its audit write (an upload that timed out may still have landed); the values are secondary evidence, and no audit file is written afterwards.",
       "required": [
         "feed_type",
         "attempt_id",

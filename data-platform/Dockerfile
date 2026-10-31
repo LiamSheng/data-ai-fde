@@ -29,7 +29,9 @@ CMD ["/app/.venv/bin/python", "scripts/check_ci.py"]
 FROM python:3.12-slim-bookworm AS runtime
 ARG SOURCE_COMMIT=unrecorded
 LABEL org.opencontainers.image.revision="${SOURCE_COMMIT}"
-ENV PATH="/app/.venv/bin:$PATH" \
+# Poll cycle records name the code that wrote them; "unrecorded" becomes null.
+ENV COLLECTOR_REVISION="${SOURCE_COMMIT}" \
+    PATH="/app/.venv/bin:$PATH" \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     HOME=/tmp
