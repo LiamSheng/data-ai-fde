@@ -143,12 +143,28 @@ def test_payload_ref_must_match_feed_type_and_digest(change: str) -> None:
         PollCycleRecord.from_record(record)
 
 
-def test_stale_after_is_exactly_1200_seconds_after_generated_at() -> None:
+def test_stale_after_is_written_900_seconds_after_generated_at() -> None:
+    assert status.STALE_AFTER.total_seconds() == 900
     record = load("latest.after_sequence.json")
-    record["stale_after_utc"] = record["stale_after_utc"].replace(":50:", ":49:")
+    latest = LatestStatus.from_record(record)
+    assert latest.stale_after_utc - latest.generated_at_utc == status.STALE_AFTER
+
+
+def test_stale_after_must_be_later_than_generated_at() -> None:
+    record = load("latest.after_sequence.json")
+    record["stale_after_utc"] = record["generated_at_utc"]
     assert_valid("latest", record)
     with pytest.raises(ValueError, match="stale_after_utc"):
         LatestStatus.from_record(record)
+
+
+def test_previous_file_with_an_earlier_stale_setting_is_still_read() -> None:
+    # Files written before the change used generated_at_utc + 1200 s.
+    record = load("latest.after_sequence.json")
+    record["stale_after_utc"] = "2026-10-30T18:50:21.049823Z"
+    assert_valid("latest", record)
+    latest = LatestStatus.from_record(record)
+    assert latest.feeds["service_alerts"].last_audit_failure_at_utc is not None
 
 
 def test_cycle_ref_must_name_this_cycles_record() -> None:
@@ -417,7 +433,7 @@ def test_latest_that_fails_its_model_check_is_skipped_and_logged(
     serve(monkeypatch)
 
     def contradictory(previous, cycle, cycle_ref):
-        raise ValueError("stale_after_utc must be generated_at_utc + 1200 s")
+        raise ValueError("stale_after_utc must be later than generated_at_utc")
 
     monkeypatch.setattr(poller.LatestStatus, "derive", contradictory)
     assert poller.main() == 0
@@ -496,6 +512,28 @@ def test_malformed_previous_latest_starts_from_empty(
     assert "latest_status=written" in output.out
 
 
+def test_previous_latest_from_the_1200_second_setting_carries_over(
+    cycle_dir, monkeypatch, capsys
+) -> None:
+    serve(monkeypatch)
+    previous = load("latest.after_sequence.json")
+    previous["stale_after_utc"] = "2026-10-30T18:50:21.049823Z"
+    latest_path(cycle_dir).parent.mkdir(parents=True)
+    latest_path(cycle_dir).write_text(json.dumps(previous))
+
+    assert poller.main() == 0
+
+    latest = read_latest(cycle_dir)
+    assert_valid("latest", latest)
+    carried = previous["feeds"]["service_alerts"]["last_audit_failure_at_utc"]
+    assert latest["feeds"]["service_alerts"]["last_audit_failure_at_utc"] == carried
+    written = LatestStatus.from_record(latest)
+    assert written.stale_after_utc - written.generated_at_utc == status.STALE_AFTER
+    output = capsys.readouterr()
+    assert "latest_status_previous_malformed" not in output.err
+    assert "latest_status=written" in output.out
+
+
 def test_a_newer_latest_is_not_overwritten_by_this_cycle(
     cycle_dir, monkeypatch, capsys
 ) -> None:
@@ -503,7 +541,7 @@ def test_a_newer_latest_is_not_overwritten_by_this_cycle(
     future = copy.deepcopy(load("latest.after_sequence.json"))
     future.update(
         generated_at_utc="2099-01-01T00:00:00Z",
-        stale_after_utc="2099-01-01T00:20:00Z",
+        stale_after_utc="2099-01-01T00:15:00Z",
         poll_cycle_id="f" * 32,
         cycle_ref=None,
     )

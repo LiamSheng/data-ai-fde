@@ -21,7 +21,7 @@
     },
     "stale_after_utc": {
       "$ref": "#/$defs/utc_timestamp",
-      "description": "generated_at_utc + 1200 seconds (twice the longest poll interval)."
+      "description": "generated_at_utc + 900 seconds when written (one poll interval plus 5 minutes). Readers use the value as written."
     },
     "poll_cycle_id": { "$ref": "#/$defs/hex32" },
     "cycle_ref": {
