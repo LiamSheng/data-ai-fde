@@ -1,0 +1,49 @@
+---
+// The Landing status row above the map: four figures, then capture frequency and health beside the chat.
+// Values arrive from latest.json in the browser; the server renders the empty frame (rules: src/lib/landing-status.ts).
+const figures = [
+  { key: 'vehicles', label: 'Vehicles reporting' },
+  { key: 'trips', label: 'Trips with live predictions' },
+  { key: 'alerts', label: 'Service alerts published' },
+  { key: 'maxLag', label: 'Max transit lag at capture' },
+];
+---
+
+<section class="status-panel status-figures" aria-label="Transit data in the latest snapshot" data-status-figures>
+  <dl class="status-grid">
+    {figures.map(({ key, label }) => (
+      <div class="status-figure">
+        <dt class="status-label">{label}</dt>
+        <dd class="status-value num" data-status-metric={key} data-tone="muted">–</dd>
+      </div>
+    ))}
+  </dl>
+  <span class="status-refresh" aria-hidden="true"></span>
+</section>
+
+<div class="status-side">
+  <section class="status-panel status-capture" aria-label="Capture frequency" data-status-capture>
+    <div class="status-figure">
+      <p class="status-value">
+        <span class="status-interval">10 min</span>
+        <span class="status-loading" aria-hidden="true">Now loading…</span>
+      </p>
+      <p class="status-label">Capture frequency</p>
+    </div>
+    <span class="status-timer" aria-hidden="true"><span class="status-timer-fill" data-status-timer></span></span>
+  </section>
+
+  <section class="status-panel status-health" aria-label="Health">
+    <div class="status-figure">
+      <p class="status-value" data-status-health data-tone="muted" aria-live="polite">–</p>
+      <p class="status-label">Health</p>
+      <p class="status-note" data-status-note></p>
+    </div>
+  </section>
+</div>
+
+<script>
+  import { startStatusBar } from '../lib/status-client';
+
+  startStatusBar(document);
+</script>

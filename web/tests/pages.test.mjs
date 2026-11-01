@@ -37,3 +37,20 @@ test('blog page is titled Blog', () => {
   assert.match(html, /<title>Blog \| Linzi's Data Lab<\/title>/);
   assert.equal(html.includes('DE Learning Notes'), false);
 });
+
+test('map page frames the Landing status: four figures, frequency and health above, the feed table in the details', () => {
+  const html = page('index.html');
+  const workspace = html.match(/<div[^>]*class="[^"]*\bworkspace\b[^"]*"[^>]*>[\s\S]*$/)?.[0];
+  assert.ok(workspace, 'workspace missing');
+  for (const label of ['Vehicles reporting', 'Trips with live predictions', 'Service alerts published',
+    'Max transit lag at capture', 'Capture frequency', '10 min', 'Health']) {
+    assert.ok(workspace.includes(label), `missing "${label}"`);
+  }
+  assert.ok(workspace.indexOf('Health') < workspace.indexOf('data-map-canvas'), 'status row should come before the map');
+  const table = workspace.match(/<table class="status-table"[\s\S]*?<\/table>/)?.[0];
+  assert.ok(table, 'status table missing');
+  for (const text of ['Feed', 'Transit data', 'Last checked', 'Data from', 'Vehicle positions', 'Trip updates', 'Service alerts']) {
+    assert.ok(table.includes(text), `table missing "${text}"`);
+  }
+  assert.equal(workspace.includes('Details will appear here.'), false);
+});
