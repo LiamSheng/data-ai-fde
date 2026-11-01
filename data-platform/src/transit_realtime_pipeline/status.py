@@ -20,8 +20,10 @@ from .models import CaptureAttempt, ErrorCategory, Outcome, _require_utc, _utc_t
 
 SCHEMA_VERSION = 1
 
-# Twice the longest poll interval (10 minutes); revisit with time-of-day cadence.
-STALE_AFTER = timedelta(seconds=1200)
+# One poll interval (10 minutes) plus 5 minutes for a slow start or a long cycle.
+# Revisit with time-of-day cadence (KAN-26). Readers use stale_after_utc as
+# written, so files from an earlier setting stay readable.
+STALE_AFTER = timedelta(seconds=900)
 
 AUDIT_WRITTEN = "written"
 AUDIT_FAILED = "failed"
@@ -710,9 +712,10 @@ class LatestStatus:
             MappingProxyType({feed: self.feeds[feed] for feed in FEED_TYPES}),
         )
 
-        # Rule: stale_after_utc is exactly STALE_AFTER after generated_at_utc.
-        if self.stale_after_utc != self.generated_at_utc + STALE_AFTER:
-            raise ValueError("stale_after_utc must be generated_at_utc + 1200 s")
+        # Rule: stale_after_utc is later than generated_at_utc. derive() writes
+        # exactly STALE_AFTER; a previous file may carry an earlier setting.
+        if self.stale_after_utc <= self.generated_at_utc:
+            raise ValueError("stale_after_utc must be later than generated_at_utc")
 
         # Rule: cycle_ref names the record of this very cycle.
         if self.cycle_ref is not None:

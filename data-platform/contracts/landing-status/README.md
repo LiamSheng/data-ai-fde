@@ -50,8 +50,10 @@ Local storage mode maps the `audit/` prefix to `data/ops/`, so `audit_ref` and
 - **`latest.json` is derived.** It can always be rebuilt from poll cycle
   records, so it never holds a fact the records do not.
   - `generated_at_utc` is the cycle's `completed_at_utc` (event time).
-  - `stale_after_utc` is `generated_at_utc` + 1200 seconds (twice the longest
-    poll interval). It will be revisited when intervals vary by time of day.
+  - `stale_after_utc` is `generated_at_utc` + 900 seconds: one poll interval
+    (10 minutes) plus 5 minutes for a slow start or a long cycle. Readers use
+    the value as written and do not assume the interval; it will change when
+    intervals vary by time of day.
   - All three feeds are always present. `last_attempt` comes from this cycle
     when the feed was requested, otherwise from the previous file.
   - `last_success_at_utc` / `last_success_feed_timestamp` and
@@ -63,7 +65,9 @@ Local storage mode maps the `audit/` prefix to `data/ops/`, so `audit_ref` and
   `feeds` in a poll cycle record matches `requested_feeds` one to one and in
   order; `audit_ref` names the same `attempt_id`; `payload_ref` starts with the
   feed type and the first two characters of `payload_sha256`;
-  `stale_after_utc` is exactly 1200 seconds after `generated_at_utc`.
+  `stale_after_utc` is later than `generated_at_utc` (the collector writes
+  exactly 900 seconds later; a previous file written with another setting is
+  still read).
 
 ## Validation
 

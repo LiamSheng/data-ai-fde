@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "generated_at_utc": "2026-10-30T18:30:21.049823Z",
-  "stale_after_utc": "2026-10-30T18:50:21.049823Z",
+  "stale_after_utc": "2026-10-30T18:45:21.049823Z",
   "poll_cycle_id": "b5a1d973d9e1bc35d05622a103a79875",
   "cycle_ref": "audit/poll_cycles/dt=2026-10-30/20261030T183021Z_b5a1d973d9e1bc35d05622a103a79875.json",
   "feeds": {
