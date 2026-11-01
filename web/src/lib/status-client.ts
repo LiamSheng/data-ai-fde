@@ -101,6 +101,17 @@ export function startStatusBar(doc: Document, url = STATUS_URL): void {
     sweepTimers.push(window.setTimeout(() => items.forEach((item) => item.style.removeProperty('opacity')), SWEEP_DRAW_MS + 400));
   }
 
+  function renderTable(view: StatusView) {
+    for (const row of rows) {
+      const data = view.rows.find((r) => r.type === row.dataset.statusRow)!;
+      for (const key of ['transitData', 'lastChecked', 'capturedSince', 'transitLag'] as const) {
+        const el = row.querySelector<HTMLElement>(`[data-cell="${key}"]`)!;
+        el.dataset.tone = data[key].tone;
+        if (el.textContent !== data[key].text) el.textContent = data[key].text;
+      }
+    }
+  }
+
   function render(animate = false) {
     const now = new Date();
     const view = buildView(latest, now, refreshFailed);
@@ -108,12 +119,7 @@ export function startStatusBar(doc: Document, url = STATUS_URL): void {
     setCell(health, view.health);
     note.textContent = view.health.note ?? '';
     note.dataset.tone = view.health.tone;
-    for (const row of rows) {
-      const data = view.rows.find((r) => r.type === row.dataset.statusRow)!;
-      for (const key of ['transitData', 'lastChecked', 'dataFrom'] as const) {
-        setCell(row.querySelector<HTMLElement>(`[data-cell="${key}"]`)!, data[key]);
-      }
-    }
+    renderTable(view);
     renderTimer(now);
   }
 
@@ -146,7 +152,11 @@ export function startStatusBar(doc: Document, url = STATUS_URL): void {
 
   function scheduleClock() {
     clearTimeout(clockTimer);
-    clockTimer = window.setTimeout(() => { render(); scheduleClock(); }, nextClockTick(latest, new Date()));
+    // Only the table moves with the clock; the figures and the timer line change with the file.
+    clockTimer = window.setTimeout(() => {
+      renderTable(buildView(latest, new Date(), refreshFailed));
+      scheduleClock();
+    }, nextClockTick(new Date()));
   }
 
   function scheduleFetch() {

@@ -13,8 +13,8 @@ export const LOADING_LEAD_MS = 10_000;
 export const QUICK_RETRY_MS = 15_000;
 export const QUICK_RETRIES = 4;
 export const SLOW_RETRY_MS = 60_000;
-/** Relative times are recomputed once a minute from the system clock, without a request (see nextClockTick). */
-export const CLOCK_TICK_MS = 60_000;
+/** The table's times are recomputed every second from the system clock, without a request (see nextClockTick). */
+export const CLOCK_TICK_MS = 1_000;
 
 export const FEEDS = [
   { type: 'vehicle_positions', name: 'Vehicle positions' },
@@ -73,7 +73,7 @@ export interface Cell {
 export interface StatusView {
   health: Cell & { note: string | null };
   metrics: { vehicles: Cell; trips: Cell; alerts: Cell; maxLag: Cell };
-  rows: { type: FeedType; name: string; transitData: Cell; lastChecked: Cell; dataFrom: Cell }[];
+  rows: { type: FeedType; name: string; transitData: Cell; lastChecked: Cell; capturedSince: Cell; transitLag: Cell }[];
 }
 
 const ERROR: Cell = { text: 'Error', tone: 'error' };
@@ -82,6 +82,12 @@ const NA: Cell = { text: 'N/A', tone: 'muted' };
 export function relativeTime(at: string, now: Date): string {
   const minutes = Math.floor((now.getTime() - Date.parse(at)) / 60_000);
   return minutes < 1 ? 'just now' : `${minutes} min ago`;
+}
+
+/** "3 min 03 s ago": to the second, seconds always two digits so the text keeps its width as it counts. */
+export function elapsedToSecond(at: string, now: Date): string {
+  const total = Math.max(0, Math.floor((now.getTime() - Date.parse(at)) / 1000));
+  return `${Math.floor(total / 60)} min ${String(total % 60).padStart(2, '0')} s ago`;
 }
 
 export function isExpired(latest: LatestStatus, now: Date): boolean {
@@ -106,6 +112,14 @@ function count(attempt: LastAttempt | null): Cell {
   return { text: String(attempt.entity_count), tone: 'normal', value: attempt.entity_count };
 }
 
+/** This feed's lag at its latest capture: feed_age_seconds, whole seconds. */
+function lag(attempt: LastAttempt | null): Cell {
+  if (!attempt) return NA;
+  if (attempt.feed_age_seconds === null) return ERROR;
+  const seconds = Math.round(attempt.feed_age_seconds);
+  return { text: `${seconds} s`, tone: 'normal', value: seconds };
+}
+
 function maxLag(feeds: FeedStatus[]): Cell {
   const attempts = feeds.map((feed) => feed.last_attempt).filter((attempt) => attempt !== null);
   if (attempts.length === 0) return NA;
@@ -124,7 +138,9 @@ export function buildView(latest: LatestStatus | null, now: Date, refreshFailed 
     return {
       health: { text: 'Unavailable', tone: 'error', note: 'Status not reachable' },
       metrics: { vehicles: ERROR, trips: ERROR, alerts: ERROR, maxLag: ERROR },
-      rows: FEEDS.map(({ type, name }) => ({ type, name, transitData: ERROR, lastChecked: ERROR, dataFrom: ERROR })),
+      rows: FEEDS.map(({ type, name }) => ({
+        type, name, transitData: ERROR, lastChecked: ERROR, capturedSince: ERROR, transitLag: ERROR,
+      })),
     };
   }
 
@@ -136,12 +152,16 @@ export function buildView(latest: LatestStatus | null, now: Date, refreshFailed 
     const lastChecked: Cell = attempt
       ? { text: relativeTime(attempt.cycle_completed_at_utc, now), tone: expired ? 'error' : 'normal' }
       : NA;
-    let dataFrom: Cell;
-    if (!attempt) dataFrom = NA;
-    else if (!feed.last_success_feed_timestamp) dataFrom = ERROR;
+    // "Captured since": the age of the newest data held, from its feed header timestamp.
+    let capturedSince: Cell;
+    if (!attempt) capturedSince = NA;
+    else if (!feed.last_success_feed_timestamp) capturedSince = ERROR;
     // Behind "Last checked" whenever the latest attempt did not count as a success.
-    else dataFrom = { text: relativeTime(feed.last_success_feed_timestamp, now), tone: succeeded(attempt) ? 'normal' : 'error' };
-    return { type, name, transitData: transitData(attempt), lastChecked, dataFrom };
+    else capturedSince = {
+      text: elapsedToSecond(feed.last_success_feed_timestamp, now),
+      tone: succeeded(attempt) ? 'normal' : 'error',
+    };
+    return { type, name, transitData: transitData(attempt), lastChecked, capturedSince, transitLag: lag(attempt) };
   });
 
   const normal = feeds.every((feed) => succeeded(feed.last_attempt));
@@ -181,7 +201,8 @@ function markKept(view: StatusView): StatusView {
       ...row,
       transitData: warn(row.transitData),
       lastChecked: warn(row.lastChecked),
-      dataFrom: warn(row.dataFrom),
+      capturedSince: warn(row.capturedSince),
+      transitLag: warn(row.transitLag),
     })),
   };
 }
@@ -216,15 +237,12 @@ export function nextFetchDelay(latest: LatestStatus | null, now: Date, missesSin
 }
 
 /**
- * Milliseconds until the next whole minute since generated_at, when the relative times change; a new file resets it.
- * Each tick recomputes from the system clock rather than adding a minute, so a laptop that slept or a background
+ * Milliseconds until the next whole second, when "Captured since" changes (feed timestamps are whole seconds).
+ * Each tick recomputes from the system clock rather than adding a second, so a laptop that slept or a background
  * tab whose timers were held back shows the true age on the next tick.
  */
-export function nextClockTick(latest: LatestStatus | null, now: Date): number {
-  if (!latest) return CLOCK_TICK_MS;
-  const elapsed = now.getTime() - Date.parse(latest.generated_at_utc);
-  const remainder = ((elapsed % CLOCK_TICK_MS) + CLOCK_TICK_MS) % CLOCK_TICK_MS;
-  return CLOCK_TICK_MS - remainder;
+export function nextClockTick(now: Date): number {
+  return CLOCK_TICK_MS - (now.getTime() % CLOCK_TICK_MS);
 }
 
 /** The count-up: 1.5 s, easeOutExpo, from the smallest number with as many digits, or from the previous value. */

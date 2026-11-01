@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import {
-  buildView, parseLatest, relativeTime, captureProgress, isLoading, nextFetchDelay, nextClockTick,
+  buildView, parseLatest, relativeTime, elapsedToSecond, captureProgress, isLoading, nextFetchDelay, nextClockTick,
   countStart, countFrame, easeOutExpo, QUICK_RETRY_MS, SLOW_RETRY_MS, CAPTURE_INTERVAL_MS,
 } from '../src/lib/landing-status.ts';
 
@@ -14,10 +14,10 @@ const min = 60_000;
 const texts = (view) => ({
   health: [view.health.text, view.health.tone, view.health.note],
   metrics: Object.fromEntries(Object.entries(view.metrics).map(([k, c]) => [k, [c.text, c.tone]])),
-  rows: view.rows.map((r) => [r.name, r.transitData.text, r.transitData.tone, r.lastChecked.text, r.dataFrom.text, r.dataFrom.tone]),
+  rows: view.rows.map((r) => [r.name, r.transitData.text, r.transitData.tone, r.lastChecked.text, r.capturedSince.text, r.capturedSince.tone, r.transitLag.text]),
 });
 
-test('no_previous: TU timed out, so Partial data with Not received, Error count and Error data time', () => {
+test('no_previous: TU timed out, so Partial data with Not received, Error count, captured time and lag', () => {
   const latest = parseLatest(example('latest.no_previous.json'));
   const view = texts(buildView(latest, at(latest.generated_at_utc, 3 * min)));
   assert.deepEqual(view.health, ['Partial data', 'error', null]);
@@ -25,13 +25,13 @@ test('no_previous: TU timed out, so Partial data with Not received, Error count 
     vehicles: ['1214', 'normal'], trips: ['Error', 'error'], alerts: ['87', 'normal'], maxLag: ['19 s', 'normal'],
   });
   assert.deepEqual(view.rows, [
-    ['Vehicle positions', 'Received', 'normal', '3 min ago', '3 min ago', 'normal'],
-    ['Trip updates', 'Not received', 'error', '3 min ago', 'Error', 'error'],
-    ['Service alerts', 'Received', 'normal', '3 min ago', '3 min ago', 'normal'],
+    ['Vehicle positions', 'Received', 'normal', '3 min ago', '3 min 49 s ago', 'normal', '19 s'],
+    ['Trip updates', 'Not received', 'error', '3 min ago', 'Error', 'error', 'Error'],
+    ['Service alerts', 'Received', 'normal', '3 min ago', '3 min 19 s ago', 'normal', '19 s'],
   ]);
 });
 
-test('after_sequence: SA audit failed, so Received but Partial data and SA data time behind in red', () => {
+test('after_sequence: SA audit failed, so Received but Partial data and SA captured time behind in red', () => {
   const latest = parseLatest(example('latest.after_sequence.json'));
   const view = texts(buildView(latest, at(latest.generated_at_utc, 1 * min)));
   assert.deepEqual(view.health, ['Partial data', 'error', null]);
@@ -60,7 +60,7 @@ test('an unreachable file keeps the table and shows Error in red', () => {
   const view = buildView(null, new Date());
   assert.deepEqual([view.health.text, view.health.note], ['Unavailable', 'Status not reachable']);
   assert.deepEqual(view.rows.map((row) => row.name), ['Vehicle positions', 'Trip updates', 'Service alerts']);
-  assert.ok([...Object.values(view.metrics), ...view.rows.flatMap((r) => [r.transitData, r.lastChecked, r.dataFrom])]
+  assert.ok([...Object.values(view.metrics), ...view.rows.flatMap((r) => [r.transitData, r.lastChecked, r.capturedSince, r.transitLag])]
     .every((cell) => cell.text === 'Error' && cell.tone === 'error'));
 });
 
@@ -81,6 +81,7 @@ test('a feed never attempted is N/A, and Max lag ignores it', () => {
   const view = buildView(latest, at(latest.generated_at_utc, min));
   assert.deepEqual([view.metrics.trips.text, view.metrics.trips.tone], ['N/A', 'muted']);
   assert.equal(view.rows[1].transitData.text, 'N/A');
+  assert.equal(view.rows[1].transitLag.text, 'N/A');
   for (const feed of Object.values(latest.feeds)) feed.last_attempt = null;
   assert.equal(buildView(latest, at(latest.generated_at_utc, min)).metrics.maxLag.text, 'N/A');
 });
@@ -105,6 +106,15 @@ test('relative time is in whole minutes, "just now" under one', () => {
   assert.equal(relativeTime(t, at(t, 60_000)), '1 min ago');
   assert.equal(relativeTime(t, at(t, 200 * min + 30_000)), '200 min ago');
   assert.equal(relativeTime(t, at(t, -5_000)), 'just now');
+});
+
+test('captured since counts to the second with two-digit seconds, so its width holds', () => {
+  const t = '2026-11-01T17:00:02Z';
+  assert.equal(elapsedToSecond(t, at(t, 42_000)), '0 min 42 s ago');
+  assert.equal(elapsedToSecond(t, at(t, 3 * min + 3_000)), '3 min 03 s ago');
+  assert.equal(elapsedToSecond(t, at(t, 3 * min + 3_999)), '3 min 03 s ago');
+  assert.equal(elapsedToSecond(t, at(t, 200 * min + 5_000)), '200 min 05 s ago');
+  assert.equal(elapsedToSecond(t, at(t, -2_000)), '0 min 00 s ago');
 });
 
 test('the capture line fills over the interval from generated_at and loading starts ten seconds before due', () => {
@@ -139,12 +149,11 @@ test('count-up starts from the smallest number with as many digits and settles o
   assert.equal(easeOutExpo(1), 1);
 });
 
-test('the clock ticks on whole minutes since generated_at and reads the true age after a long pause', () => {
+test('the clock ticks on whole seconds and reads the true age after a long pause', () => {
   const latest = parseLatest(example('latest.no_previous.json'));
   const g = latest.generated_at_utc;
-  assert.equal(nextClockTick(latest, at(g, 3 * min + 50_000)), 10_000);
-  assert.equal(nextClockTick(latest, at(g, 3 * min)), min);
-  assert.equal(nextClockTick(null, new Date()), min);
+  assert.equal(nextClockTick(new Date('2026-11-01T17:00:02.250Z')), 750);
+  assert.equal(nextClockTick(new Date('2026-11-01T17:00:02.000Z')), 1000);
   // Timers held back for an hour: the next tick recomputes from the clock instead of adding one minute.
   const view = buildView(latest, at(g, 64 * min));
   assert.equal(view.rows[0].lastChecked.text, '64 min ago');

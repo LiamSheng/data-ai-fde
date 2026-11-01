@@ -6,7 +6,7 @@ import { FEEDS } from '../lib/landing-status';
   <table class="status-table">
     <caption class="visually-hidden">Landing status by feed</caption>
     <thead>
-      <tr><th scope="col">Feed</th><th scope="col">Transit data</th><th scope="col">Last checked</th><th scope="col">Data from</th></tr>
+      <tr><th scope="col">Feed</th><th scope="col">Transit data</th><th scope="col">Last checked</th><th scope="col">Captured since</th><th scope="col">Transit lag at capture</th></tr>
     </thead>
     <tbody>
       {FEEDS.map(({ type, name }) => (
@@ -14,7 +14,8 @@ import { FEEDS } from '../lib/landing-status';
           <th scope="row">{name}</th>
           <td data-cell="transitData" data-tone="muted">–</td>
           <td data-cell="lastChecked" data-tone="muted">–</td>
-          <td data-cell="dataFrom" data-tone="muted">–</td>
+          <td data-cell="capturedSince" data-tone="muted">–</td>
+          <td data-cell="transitLag" data-tone="muted">–</td>
         </tr>
       ))}
     </tbody>

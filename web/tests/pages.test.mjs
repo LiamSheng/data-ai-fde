@@ -49,7 +49,7 @@ test('map page frames the Landing status: four figures, frequency and health abo
   assert.ok(workspace.indexOf('Health') < workspace.indexOf('data-map-canvas'), 'status row should come before the map');
   const table = workspace.match(/<table class="status-table"[\s\S]*?<\/table>/)?.[0];
   assert.ok(table, 'status table missing');
-  for (const text of ['Feed', 'Transit data', 'Last checked', 'Data from', 'Vehicle positions', 'Trip updates', 'Service alerts']) {
+  for (const text of ['Feed', 'Transit data', 'Last checked', 'Captured since', 'Transit lag at capture', 'Vehicle positions', 'Trip updates', 'Service alerts']) {
     assert.ok(table.includes(text), `table missing "${text}"`);
   }
   assert.equal(workspace.includes('Details will appear here.'), false);
