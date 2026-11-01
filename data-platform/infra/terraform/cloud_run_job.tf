@@ -1,9 +1,10 @@
 locals {
   # 后续发布必须审核新的 digest，不使用 latest。
-  # 2026-10-31 KAN-25：Cloud Build 7593f164，源码 f84aeab（周期记录与 latest.json）；
-  # 云端离线检查 118 通过、5 个允许的快照跳过，运行时导入冒烟通过。
-  # 上一版：sha256:c2cdf1da61ad52e79735e93618abf18683b075d87350132b24052e31cb4b5f0e
-  collector_image_digest = "sha256:fdc699d3258a1b43446376ba5e1edb9381e65b7180c4a4aab0218b5370f0344b"
+  # 2026-11-01 KAN-27：Cloud Build 704e1c78，源码 78b4d4b（stale_after 改为 15 分钟）；
+  # 云端离线检查 121 通过、5 个允许的快照跳过，运行时导入冒烟通过。
+  # 上一版（KAN-25，Cloud Build 7593f164，源码 f84aeab）：
+  # sha256:fdc699d3258a1b43446376ba5e1edb9381e65b7180c4a4aab0218b5370f0344b
+  collector_image_digest = "sha256:a2b8d84aad93d1e17de43e0fc3bf3b8908712f86cf1d5b8451ef9d0839f35f63"
   collector_image        = "${google_artifact_registry_repository.collector_images.location}-docker.pkg.dev/${google_artifact_registry_repository.collector_images.project}/${google_artifact_registry_repository.collector_images.repository_id}/collector@${local.collector_image_digest}"
 }
 
