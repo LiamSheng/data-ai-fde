@@ -12,6 +12,7 @@
     "build": "astro build",
     "preview": "astro preview",
     "test:map": "node --test tests/map-client.test.mjs",
+    "test:status": "node --test tests/landing-status.test.mjs",
     "test:pages": "astro build && node --test tests/pages.test.mjs"
   },
   "dependencies": {

@@ -3,8 +3,8 @@
  * workspace, dense under the header and thinning toward the bottom of the panels. Each strand
  * is a dotted line with a few dense bodies travelling along it, most trailing a line of
  * pipeline code, SQL or an assistant step. The map covers the field; it shows
- * on the paper around and between the panels, and under the glass of the details and the chat, which blurs it.
- * One canvas on an 8 by 16 cell; colours come from the Cobalt tokens, never literals.
+ * on the paper around and between the panels, and under the glass of the status row, the details and the chat, which blurs it.
+ * One canvas on an 8 by 16 cell; colours come from the field greys in global.css, never literals.
  */
 const CELL_W = 8;
 const CELL_H = 16;
@@ -67,15 +67,17 @@ const inside = (box: Box, x: number, y: number) => x >= box.left && x < box.righ
 
 export function startAsciiField(canvas: HTMLCanvasElement, workspace: HTMLElement): () => void {
   const ctx = canvas.getContext('2d');
-  const panels = ['.map-panel', '.detail-panel', '.chat-panel'].map((selector) => workspace.querySelector<HTMLElement>(selector));
+  // The map first: it is the one panel that covers the field. The status panels are glass like the details and the chat.
+  const panels = [...['.map-panel', '.detail-panel', '.chat-panel'].map((selector) => workspace.querySelector<HTMLElement>(selector)),
+    ...workspace.querySelectorAll<HTMLElement>('.status-panel')];
   if (!ctx || panels.some((panel) => !panel)) return () => {};
 
   const tokens = getComputedStyle(document.documentElement);
   const token = (name: string) => tokens.getPropertyValue(name).trim();
-  // One tone per ramp step; the field never goes lighter than glyph-2.
-  const paperTones = ['--color-glyph-2', '--color-glyph-2', '--color-glyph-3', '--color-glyph-3', '--color-glyph-3',
-    '--color-glyph-4', '--color-glyph-4', '--color-glyph-4', '--color-accent-deep'].map(token);
-  const glyph4 = token('--color-glyph-4');
+  // One grey per ramp step, never lighter than field-1; blue is kept for the data in the panels.
+  const paperTones = ['--color-field-1', '--color-field-1', '--color-field-2', '--color-field-2', '--color-field-2',
+    '--color-field-3', '--color-field-3', '--color-field-3', '--color-field-4'].map(token);
+  const glyph4 = token('--color-field-3');
   const font = `400 12px ${token('--font-outlier')}`;
   const codeFont = `700 12px ${token('--font-outlier')}`;
   const reduce = window.matchMedia('(prefers-reduced-motion: reduce)');

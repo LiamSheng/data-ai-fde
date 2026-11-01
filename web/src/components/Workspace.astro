@@ -1,10 +1,12 @@
 ---
+import StatusBar from './StatusBar.astro';
 import MapPanel from './MapPanel.astro';
 import DetailPanel from './DetailPanel.astro';
 import ChatPanel from './ChatPanel.astro';
 ---
 
 <div class="workspace not-content">
+  <StatusBar />
   <MapPanel />
   <DetailPanel />
   <ChatPanel />
@@ -19,7 +21,7 @@ import ChatPanel from './ChatPanel.astro';
   if (canvas && workspace) startAsciiField(canvas, workspace);
 
   // The glass sheen follows the pointer while it is over a glass panel.
-  for (const panel of document.querySelectorAll<HTMLElement>('.detail-panel, .chat-panel')) {
+  for (const panel of document.querySelectorAll<HTMLElement>('.detail-panel, .chat-panel, .status-panel')) {
     panel.addEventListener('pointermove', (event) => {
       const box = panel.getBoundingClientRect();
       panel.style.setProperty('--glass-x', `${event.clientX - box.left}px`);

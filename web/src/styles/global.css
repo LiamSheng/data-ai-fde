@@ -46,6 +46,20 @@
   --glass-blur: 5px;
   --glass-sheen-size: 140px;
   --glass-grain-opacity: 0.06;
+  /* Landing status (KAN-27): a quieter red than --color-error for faults, an orange for an older file kept after a
+   * failed refresh. Both stay close to the ink's lightness so they read as text, not alarms. */
+  --color-status-error: oklch(50% 0.14 27);
+  --color-status-warn: oklch(58% 0.11 62);
+  /* The ASCII field in cool greys (2026-11-01: grey, not blue, so the status figures are the only blue). */
+  --color-field-1: oklch(86% 0.006 255);
+  --color-field-2: oklch(77% 0.008 255);
+  --color-field-3: oklch(64% 0.01 255);
+  --color-field-4: oklch(46% 0.012 258);
+  /* The map takes this share of the band; the table below it takes what its rows need. */
+  --lab-map-height: calc(var(--lab-workspace-height) * 0.66);
+  /* Panel padding follows the window; the type does not. */
+  --status-pad-x: clamp(var(--space-sm), 1.6vw, var(--space-xl));
+  --status-pad-y: clamp(var(--space-xs), 0.9vw, var(--space-md));
 }
 
 :root[data-has-sidebar] { --sl-content-width: 48rem; }
@@ -166,7 +180,7 @@ select:focus-visible {
 
 /* Without script, a dot on every cell of the field stands in for it. */
 :root:not([data-has-sidebar]) .content-panel:not(:has(.ascii-field[data-live])) {
-  background-image: radial-gradient(circle at 50% 50%, var(--color-glyph-2) 1px, transparent 1.5px);
+  background-image: radial-gradient(circle at 50% 50%, var(--color-field-2) 1px, transparent 1.5px);
   background-size: var(--cell-w) var(--cell-h);
 }
 
@@ -180,19 +194,19 @@ select:focus-visible {
   pointer-events: none;
 }
 
-/* Workspace: three panels, map over details on the left and the chat beside them; the gaps carry the field. */
+/* Workspace: the status row on top; the map over the details on the left and the chat beside them; the gaps carry the field. */
 .workspace {
   display: grid;
   grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
-  grid-template-rows: minmax(0, 5fr) minmax(0, 2fr);
+  grid-template-rows: auto minmax(0, var(--lab-map-height)) auto;
   gap: var(--lab-gap-y) var(--lab-gap-x);
-  height: var(--lab-workspace-height);
   margin-block: var(--space-2xl);
 }
 
 .map-panel,
 .detail-panel,
-.chat-panel {
+.chat-panel,
+.status-panel {
   position: relative;
   min-width: 0;
   min-height: 0;
@@ -202,7 +216,7 @@ select:focus-visible {
   box-shadow: var(--shadow-card);
 }
 
-.map-panel { grid-column: 1; grid-row: 1; background: var(--color-paper-2); }
+.map-panel { grid-column: 1; grid-row: 2; background: var(--color-paper-2); }
 .map-canvas { width: 100%; height: 100%; }
 
 .map-loading,
@@ -242,7 +256,8 @@ select:focus-visible {
 /* Details and chat: frosted glass over the field. They sit above the canvas, so the strands pass under them blurred;
  * the glass stays mostly opaque so the text they will hold reads first. */
 .detail-panel,
-.chat-panel {
+.chat-panel,
+.status-panel {
   z-index: calc(var(--z-raised) + 1);
   display: grid;
   place-items: center;
@@ -255,20 +270,23 @@ select:focus-visible {
   backdrop-filter: blur(var(--glass-blur)) saturate(1.4);
 }
 
-.detail-panel { grid-column: 1; grid-row: 2; }
-.chat-panel { grid-column: 2; grid-row: 1 / span 2; }
+.detail-panel { grid-column: 1; grid-row: 3; place-items: stretch; padding: var(--status-pad-y) var(--status-pad-x); }
+.chat-panel { grid-column: 2; grid-row: 2 / span 2; }
 
 /* Without backdrop blur the glass would show the strands sharp, so it turns solid paper instead. */
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
   .detail-panel,
-  .chat-panel { background: var(--color-paper-2); }
+  .chat-panel,
+  .status-panel { background: var(--color-paper-2); }
 }
 
 /* The sheen: a soft light where the pointer is, set by Workspace.astro; hidden until the pointer arrives. */
 .detail-panel::before,
 .detail-panel::after,
 .chat-panel::before,
-.chat-panel::after {
+.chat-panel::after,
+.status-panel::before,
+.status-panel::after {
   content: '';
   position: absolute;
   inset: 0;
@@ -276,18 +294,21 @@ select:focus-visible {
 }
 
 .detail-panel::before,
-.chat-panel::before {
+.chat-panel::before,
+.status-panel::before {
   background: radial-gradient(var(--glass-sheen-size) circle at var(--glass-x, 50%) var(--glass-y, 0%), var(--color-glass-sheen), transparent 70%);
   opacity: 0;
   transition: opacity var(--dur-short) var(--ease-out);
 }
 
 .detail-panel[data-lit]::before,
-.chat-panel[data-lit]::before { opacity: 1; }
+.chat-panel[data-lit]::before,
+.status-panel[data-lit]::before { opacity: 1; }
 
 /* A faint grain so the glass reads as a material, not a tint. */
 .detail-panel::after,
-.chat-panel::after {
+.chat-panel::after,
+.status-panel::after {
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
   opacity: var(--glass-grain-opacity);
   mix-blend-mode: soft-light;
@@ -303,6 +324,299 @@ select:focus-visible {
   font-weight: 500;
 }
 
+/* Landing status (KAN-27). The row above the map: four figures over the map column, frequency and health over the chat.
+ * Figures are centred, value over label; panels share the glass above; colours by tone, set by status-client.ts. */
+.status-figures { grid-column: 1; grid-row: 1; }
+.status-side {
+  grid-column: 2;
+  grid-row: 1;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--lab-gap-x);
+}
+
+/* Every status panel keeps the same foot below its label, so values and labels line up across the row;
+ * the health note and the capture timer live in that foot. */
+.status-panel {
+  --status-foot: 1.25rem;
+  display: grid;
+  place-items: stretch;
+  /* Values hang from the same top line in every panel, whether a label takes one line or two. */
+  align-content: start;
+  padding: var(--status-pad-y) var(--status-pad-x) calc(var(--status-pad-y) + var(--status-foot));
+}
+
+.status-grid {
+  position: relative;
+  z-index: var(--z-base);
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin: 0;
+}
+
+.status-figure {
+  position: relative;
+  z-index: var(--z-base);
+  display: flex;
+  flex-direction: column-reverse;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-3xs);
+  min-width: 0;
+  padding-inline: var(--space-xs);
+  text-align: center;
+}
+
+.status-capture .status-figure,
+.status-health .status-figure { flex-direction: column; justify-content: flex-start; }
+
+/* Plain hairlines between figures, never in a status colour. */
+.status-grid .status-figure + .status-figure { border-left: var(--rule-hair) solid var(--color-rule-2); }
+
+.status-value {
+  margin: 0;
+  color: var(--color-accent);
+  font-family: var(--font-display);
+  font-size: var(--text-3xl);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: var(--tracking-display);
+  line-height: 1.1;
+  white-space: nowrap;
+}
+
+.status-label {
+  margin: 0;
+  color: var(--color-ink-2);
+  font-family: var(--font-display);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  line-height: 1.3;
+}
+
+.status-note {
+  position: absolute;
+  inset: auto 0 calc(-1 * var(--status-foot));
+  height: var(--status-foot);
+  margin: 0;
+  color: var(--color-muted);
+  font-family: var(--font-outlier);
+  font-size: var(--text-xs);
+  line-height: 1.3;
+}
+
+.status-value[data-tone='warning'], .status-note[data-tone='warning'] { color: var(--color-status-warn); }
+.status-value[data-tone='error'], .status-note[data-tone='error'] { color: var(--color-status-error); }
+.status-value[data-tone='muted'] { color: var(--color-muted); }
+
+/* Numbers enter like the attempts on the retries timeline: a short fade and rise, one after another. */
+.status-value.is-entering { animation: status-enter var(--dur-long) var(--ease-out) both; }
+
+/* The line under the frequency fills over the capture interval; status-client.ts sets where it starts. */
+.status-timer {
+  position: absolute;
+  inset: auto var(--status-pad-x) 0;
+  z-index: var(--z-base);
+  height: 2px;
+  background: var(--color-rule);
+}
+
+.status-timer-fill {
+  display: block;
+  height: 100%;
+  background: var(--color-accent);
+  transform: scaleX(0);
+  transform-origin: left;
+}
+
+/* The ten seconds before the next file and the retries after it: the frequency gives way to "Now loading…".
+ * Both take the value's type; the theme sizes bare spans otherwise. */
+.status-interval, .status-loading { font: inherit; letter-spacing: inherit; }
+.status-loading { display: none; }
+.status-capture[data-loading] .status-interval { display: none; }
+.status-capture[data-loading] .status-loading {
+  display: inline;
+  /* One step smaller than the figures so the longer words fit the same panel. */
+  font-size: var(--text-2xl);
+  background: linear-gradient(90deg, var(--color-accent-deep), var(--color-accent-2), var(--color-accent-deep)) 0 0 / 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  filter: drop-shadow(0 0 6px color-mix(in oklab, var(--color-accent-2) 45%, transparent));
+  animation: status-shimmer 2.2s linear infinite;
+}
+
+/* The sweep, from the Cobalt retries timeline: on a new file a line runs left to right along the foot of the figures,
+ * and each figure enters as the line reaches it (status-client.ts times them); then the line fades. */
+.status-refresh {
+  position: absolute;
+  inset: auto var(--status-pad-x) 0;
+  z-index: var(--z-base);
+  height: 2px;
+  background: var(--color-accent);
+  opacity: 0;
+  transform: scaleX(0);
+  transform-origin: left;
+  pointer-events: none;
+}
+
+.status-figures[data-sweep] .status-refresh { animation: status-sweep var(--status-sweep-ms, 800ms) linear forwards; }
+
+/* Until the first sweep, the figures wait unseen; status-client.ts sets this only when it will run the sweep. */
+.status-figures[data-pending] .status-figure { opacity: 0; }
+.status-figure.is-entering { animation: status-enter var(--dur-long) var(--ease-out) both; }
+
+/* The details table: the same type as the figures' labels, aligned to the panel's padding. */
+.status-table {
+  position: relative;
+  z-index: var(--z-base);
+  width: 100%;
+  margin: 0;
+  border-collapse: collapse;
+  font-family: var(--font-body);
+  font-size: var(--text-md);
+  font-variant-numeric: tabular-nums;
+}
+
+.status-table th,
+.status-table td {
+  padding: var(--space-xs) var(--space-sm);
+  border: 0;
+  border-bottom: var(--rule-hair) solid var(--color-rule);
+  background: transparent;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.status-table th:first-child, .status-table td:first-child { padding-left: 0; }
+/* Feeds read from the left; every value column is centred, like the figures above. */
+.status-table th:not(:first-child), .status-table td { text-align: center; }
+
+/* Notes on the time columns: a small "i" beside the heading opens a speech bubble below it. Explanatory, so in the
+ * paper and ink of the panels, never a status colour. */
+.status-th { display: inline-flex; align-items: center; gap: var(--space-2xs); }
+.status-tip-anchor { position: relative; display: inline-flex; }
+
+.status-info {
+  display: inline-grid;
+  place-items: center;
+  width: 1rem;
+  height: 1rem;
+  padding: 0;
+  border: var(--rule-hair) solid var(--color-rule-2);
+  border-radius: var(--radius-pill);
+  background: var(--color-paper);
+  color: var(--color-muted);
+  font-family: var(--font-display);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  line-height: 1;
+  cursor: help;
+  transition: color var(--dur-micro) var(--ease-out), border-color var(--dur-micro) var(--ease-out);
+}
+
+.status-info::after { content: ''; position: absolute; inset: -6px; }
+.status-info:hover, .status-tip-anchor[data-open] .status-info { color: var(--color-accent); border-color: var(--color-accent-2); }
+
+.status-tip {
+  position: absolute;
+  top: calc(100% + 10px);
+  left: 50%;
+  z-index: var(--z-tooltip);
+  width: max-content;
+  max-width: 15rem;
+  padding: var(--space-xs) var(--space-sm);
+  border: var(--rule-hair) solid var(--color-rule-2);
+  border-radius: var(--radius-card);
+  background: var(--color-paper);
+  box-shadow: 0 6px 16px -6px oklch(21% 0.028 262 / 0.22), var(--shadow-card);
+  color: var(--color-ink-2);
+  font-family: var(--font-body);
+  font-size: var(--text-sm);
+  font-weight: 400;
+  line-height: 1.4;
+  text-align: left;
+  white-space: normal;
+  opacity: 0;
+  visibility: hidden;
+  transform: translate(-50%, -4px);
+  transition: opacity var(--dur-short) var(--ease-out), transform var(--dur-short) var(--ease-out), visibility 0s linear var(--dur-short);
+  pointer-events: none;
+}
+
+/* The tail: a small turned square sharing the bubble's border, pointing at the "i". */
+.status-tip::before {
+  content: '';
+  position: absolute;
+  top: -5px;
+  left: calc(50% - 4px);
+  width: 8px;
+  height: 8px;
+  border-top: var(--rule-hair) solid var(--color-rule-2);
+  border-left: var(--rule-hair) solid var(--color-rule-2);
+  background: var(--color-paper);
+  transform: rotate(45deg);
+}
+
+/* The last column sits at the panel's right edge, so its bubble opens leftward with the tail at its right. */
+.status-table th:last-child .status-tip { left: auto; right: -6px; transform: translateY(-4px); }
+.status-table th:last-child .status-tip::before { left: auto; right: 9px; }
+
+.status-tip-anchor:hover .status-tip,
+.status-tip-anchor:focus-within .status-tip,
+.status-tip-anchor[data-open] .status-tip {
+  opacity: 1;
+  visibility: visible;
+  transform: translate(-50%, 0);
+  transition: opacity var(--dur-short) var(--ease-out), transform var(--dur-short) var(--ease-out), visibility 0s;
+}
+
+.status-table th:last-child .status-tip-anchor:hover .status-tip,
+.status-table th:last-child .status-tip-anchor:focus-within .status-tip,
+.status-table th:last-child .status-tip-anchor[data-open] .status-tip { transform: none; }
+.status-table tbody tr:last-child > * { border-bottom: 0; }
+.status-table thead th { color: var(--color-ink-2); font-family: var(--font-display); font-size: var(--text-sm); font-weight: 500; }
+.status-table tbody th { color: var(--color-ink); font-weight: 500; }
+.status-table td { color: var(--color-ink); }
+.status-table td[data-tone='warning'] { color: var(--color-status-warn); }
+.status-table td[data-tone='error'] { color: var(--color-status-error); }
+.status-table td[data-tone='muted'] { color: var(--color-muted); }
+
+@keyframes status-enter {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes status-sweep {
+  0% { opacity: 1; transform: scaleX(0); }
+  80% { opacity: 1; transform: scaleX(1); }
+  100% { opacity: 0; transform: scaleX(1); }
+}
+
+@keyframes status-timer {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}
+
+@keyframes status-shimmer {
+  from { background-position: 200% 0; }
+  to { background-position: 0 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .status-capture[data-loading] .status-loading { animation: none; }
+  .status-refresh { transition: none; }
+  .status-info, .status-tip { transition: none; }
+}
+
+/* Narrow: the figures two by two, frequency and health side by side, the table scrolls inside its panel. */
+@media (max-width: 48rem) {
+  .status-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); row-gap: var(--space-sm); }
+  .status-grid .status-figure:nth-child(3) { border-left: 0; }
+  .status-value { font-size: var(--text-2xl); }
+  .detail-panel { overflow-x: auto; }
+}
+
 @keyframes map-pulse {
   0% { opacity: 1; }
   100% { opacity: 0.25; }
@@ -314,7 +628,8 @@ select:focus-visible {
   .site-navigation a,
   .site-profile,
   .detail-panel::before,
-  .chat-panel::before { transition: none; }
+  .chat-panel::before,
+  .status-panel::before { transition: none; }
 }
 
 /* Blog pages: the title clears the header; the current sidebar link sits on the cobalt wash. */
@@ -352,14 +667,13 @@ select:focus-visible {
 
   .workspace {
     grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: clamp(20rem, 60svh, 32rem) minmax(8rem, auto) minmax(12rem, auto);
-    height: auto;
     margin-block: var(--space-xl);
   }
 
-  .map-panel, .detail-panel, .chat-panel { grid-column: 1; }
-  .detail-panel { grid-row: 2; }
-  .chat-panel { grid-row: 3; }
+  .workspace { grid-template-rows: none; }
+  .map-panel, .detail-panel, .chat-panel, .status-figures, .status-side { grid-column: 1; grid-row: auto; }
+  .map-panel { height: clamp(20rem, 60svh, 32rem); }
+  .chat-panel { min-height: 12rem; }
 }
 
 @media (max-width: 30rem) {
