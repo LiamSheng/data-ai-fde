@@ -12,12 +12,20 @@ import {
 const SWEEP_DRAW_MS = 640;
 
 export function startStatusBar(doc: Document, url = STATUS_URL): void {
-  const figures = doc.querySelector<HTMLElement>('[data-status-figures]');
-  const capture = doc.querySelector<HTMLElement>('[data-status-capture]');
-  const timer = doc.querySelector<HTMLElement>('[data-status-timer]');
-  const health = doc.querySelector<HTMLElement>('[data-status-health]');
-  const note = doc.querySelector<HTMLElement>('[data-status-note]');
-  if (!figures || !capture || !timer || !health || !note) return;
+  const found = {
+    figures: doc.querySelector<HTMLElement>('[data-status-figures]'),
+    capture: doc.querySelector<HTMLElement>('[data-status-capture]'),
+    timer: doc.querySelector<HTMLElement>('[data-status-timer]'),
+    health: doc.querySelector<HTMLElement>('[data-status-health]'),
+    note: doc.querySelector<HTMLElement>('[data-status-note]'),
+  };
+  if (!found.figures || !found.capture || !found.timer || !found.health || !found.note) return;
+  // Rebound as non-null: the checks above do not carry into the hoisted functions below.
+  const figures: HTMLElement = found.figures;
+  const capture: HTMLElement = found.capture;
+  const timer: HTMLElement = found.timer;
+  const health: HTMLElement = found.health;
+  const note: HTMLElement = found.note;
   const metrics = [...doc.querySelectorAll<HTMLElement>('[data-status-metric]')];
   const items = metrics.map((el) => el.closest<HTMLElement>('.status-figure')!);
   const rows = [...doc.querySelectorAll<HTMLElement>('[data-status-row]')];
@@ -69,7 +77,7 @@ export function startStatusBar(doc: Document, url = STATUS_URL): void {
    */
   function renderFigures(view: StatusView, animate: boolean) {
     const cells = [view.metrics.vehicles, view.metrics.trips, view.metrics.alerts, view.metrics.maxLag];
-    const first = figures!.hasAttribute('data-pending');
+    const first = figures.hasAttribute('data-pending');
     const sweep = animate && seen && !reduce.matches;
     if (sweep) sweepTimers.splice(0).forEach(clearTimeout);
     metrics.forEach((el, index) => {
@@ -92,10 +100,10 @@ export function startStatusBar(doc: Document, url = STATUS_URL): void {
       }, at));
     });
     if (!sweep) return;
-    figures!.removeAttribute('data-sweep');
-    void figures!.offsetWidth;
-    figures!.dataset.sweep = '';
-    delete figures!.dataset.pending;
+    figures.removeAttribute('data-sweep');
+    void figures.offsetWidth;
+    figures.dataset.sweep = '';
+    delete figures.dataset.pending;
     // The first time, the figures were unseen; keep each hidden until its own moment by entering from opacity 0.
     if (first) items.forEach((item) => { item.style.opacity = '0'; });
     sweepTimers.push(window.setTimeout(() => items.forEach((item) => item.style.removeProperty('opacity')), SWEEP_DRAW_MS + 400));
