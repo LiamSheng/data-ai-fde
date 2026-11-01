@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import {
-  buildView, parseLatest, relativeTime, elapsedToSecond, captureProgress, isLoading, nextFetchDelay, nextClockTick,
+  buildView, parseLatest, relativeTime, ageToSecond, captureProgress, isLoading, nextFetchDelay, nextClockTick,
   countStart, countFrame, easeOutExpo, QUICK_RETRY_MS, SLOW_RETRY_MS, CAPTURE_INTERVAL_MS,
 } from '../src/lib/landing-status.ts';
 
@@ -14,10 +14,10 @@ const min = 60_000;
 const texts = (view) => ({
   health: [view.health.text, view.health.tone, view.health.note],
   metrics: Object.fromEntries(Object.entries(view.metrics).map(([k, c]) => [k, [c.text, c.tone]])),
-  rows: view.rows.map((r) => [r.name, r.transitData.text, r.transitData.tone, r.lastChecked.text, r.capturedSince.text, r.capturedSince.tone, r.transitLag.text]),
+  rows: view.rows.map((r) => [r.name, r.transitData.text, r.transitData.tone, r.lastChecked.text, r.dataAge.text, r.dataAge.tone, r.transitLag.text]),
 });
 
-test('no_previous: TU timed out, so Partial data with Not received, Error count, captured time and lag', () => {
+test('no_previous: TU timed out, so Partial data with Not received, Error count, data age and lag', () => {
   const latest = parseLatest(example('latest.no_previous.json'));
   const view = texts(buildView(latest, at(latest.generated_at_utc, 3 * min)));
   assert.deepEqual(view.health, ['Partial data', 'error', null]);
@@ -25,13 +25,13 @@ test('no_previous: TU timed out, so Partial data with Not received, Error count,
     vehicles: ['1214', 'normal'], trips: ['Error', 'error'], alerts: ['87', 'normal'], maxLag: ['19 s', 'normal'],
   });
   assert.deepEqual(view.rows, [
-    ['Vehicle positions', 'Received', 'normal', '3 min ago', '3 min 49 s ago', 'normal', '19 s'],
+    ['Vehicle positions', 'Received', 'normal', '3 min ago', '3 min 49 s', 'normal', '19 s'],
     ['Trip updates', 'Not received', 'error', '3 min ago', 'Error', 'error', 'Error'],
-    ['Service alerts', 'Received', 'normal', '3 min ago', '3 min 19 s ago', 'normal', '19 s'],
+    ['Service alerts', 'Received', 'normal', '3 min ago', '3 min 19 s', 'normal', '19 s'],
   ]);
 });
 
-test('after_sequence: SA audit failed, so Received but Partial data and SA captured time behind in red', () => {
+test('after_sequence: SA audit failed, so Received but Partial data and SA data age behind in red', () => {
   const latest = parseLatest(example('latest.after_sequence.json'));
   const view = texts(buildView(latest, at(latest.generated_at_utc, 1 * min)));
   assert.deepEqual(view.health, ['Partial data', 'error', null]);
@@ -60,7 +60,7 @@ test('an unreachable file keeps the table and shows Error in red', () => {
   const view = buildView(null, new Date());
   assert.deepEqual([view.health.text, view.health.note], ['Unavailable', 'Status not reachable']);
   assert.deepEqual(view.rows.map((row) => row.name), ['Vehicle positions', 'Trip updates', 'Service alerts']);
-  assert.ok([...Object.values(view.metrics), ...view.rows.flatMap((r) => [r.transitData, r.lastChecked, r.capturedSince, r.transitLag])]
+  assert.ok([...Object.values(view.metrics), ...view.rows.flatMap((r) => [r.transitData, r.lastChecked, r.dataAge, r.transitLag])]
     .every((cell) => cell.text === 'Error' && cell.tone === 'error'));
 });
 
@@ -108,13 +108,13 @@ test('relative time is in whole minutes, "just now" under one', () => {
   assert.equal(relativeTime(t, at(t, -5_000)), 'just now');
 });
 
-test('captured since counts to the second with two-digit seconds, so its width holds', () => {
+test('data age counts to the second with two-digit seconds, so its width holds', () => {
   const t = '2026-11-01T17:00:02Z';
-  assert.equal(elapsedToSecond(t, at(t, 42_000)), '0 min 42 s ago');
-  assert.equal(elapsedToSecond(t, at(t, 3 * min + 3_000)), '3 min 03 s ago');
-  assert.equal(elapsedToSecond(t, at(t, 3 * min + 3_999)), '3 min 03 s ago');
-  assert.equal(elapsedToSecond(t, at(t, 200 * min + 5_000)), '200 min 05 s ago');
-  assert.equal(elapsedToSecond(t, at(t, -2_000)), '0 min 00 s ago');
+  assert.equal(ageToSecond(t, at(t, 42_000)), '0 min 42 s');
+  assert.equal(ageToSecond(t, at(t, 3 * min + 3_000)), '3 min 03 s');
+  assert.equal(ageToSecond(t, at(t, 3 * min + 3_999)), '3 min 03 s');
+  assert.equal(ageToSecond(t, at(t, 200 * min + 5_000)), '200 min 05 s');
+  assert.equal(ageToSecond(t, at(t, -2_000)), '0 min 00 s');
 });
 
 test('the capture line fills over the interval from generated_at and loading starts ten seconds before due', () => {

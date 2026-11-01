@@ -489,6 +489,91 @@ select:focus-visible {
 }
 
 .status-table th:first-child, .status-table td:first-child { padding-left: 0; }
+/* Feeds read from the left; every value column is centred, like the figures above. */
+.status-table th:not(:first-child), .status-table td { text-align: center; }
+
+/* Notes on the time columns: a small "i" beside the heading opens a speech bubble below it. Explanatory, so in the
+ * paper and ink of the panels, never a status colour. */
+.status-th { display: inline-flex; align-items: center; gap: var(--space-2xs); }
+.status-tip-anchor { position: relative; display: inline-flex; }
+
+.status-info {
+  display: inline-grid;
+  place-items: center;
+  width: 1rem;
+  height: 1rem;
+  padding: 0;
+  border: var(--rule-hair) solid var(--color-rule-2);
+  border-radius: var(--radius-pill);
+  background: var(--color-paper);
+  color: var(--color-muted);
+  font-family: var(--font-display);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  line-height: 1;
+  cursor: help;
+  transition: color var(--dur-micro) var(--ease-out), border-color var(--dur-micro) var(--ease-out);
+}
+
+.status-info::after { content: ''; position: absolute; inset: -6px; }
+.status-info:hover, .status-tip-anchor[data-open] .status-info { color: var(--color-accent); border-color: var(--color-accent-2); }
+
+.status-tip {
+  position: absolute;
+  top: calc(100% + 10px);
+  left: 50%;
+  z-index: var(--z-tooltip);
+  width: max-content;
+  max-width: 15rem;
+  padding: var(--space-xs) var(--space-sm);
+  border: var(--rule-hair) solid var(--color-rule-2);
+  border-radius: var(--radius-card);
+  background: var(--color-paper);
+  box-shadow: 0 6px 16px -6px oklch(21% 0.028 262 / 0.22), var(--shadow-card);
+  color: var(--color-ink-2);
+  font-family: var(--font-body);
+  font-size: var(--text-sm);
+  font-weight: 400;
+  line-height: 1.4;
+  text-align: left;
+  white-space: normal;
+  opacity: 0;
+  visibility: hidden;
+  transform: translate(-50%, -4px);
+  transition: opacity var(--dur-short) var(--ease-out), transform var(--dur-short) var(--ease-out), visibility 0s linear var(--dur-short);
+  pointer-events: none;
+}
+
+/* The tail: a small turned square sharing the bubble's border, pointing at the "i". */
+.status-tip::before {
+  content: '';
+  position: absolute;
+  top: -5px;
+  left: calc(50% - 4px);
+  width: 8px;
+  height: 8px;
+  border-top: var(--rule-hair) solid var(--color-rule-2);
+  border-left: var(--rule-hair) solid var(--color-rule-2);
+  background: var(--color-paper);
+  transform: rotate(45deg);
+}
+
+/* The last column sits at the panel's right edge, so its bubble opens leftward with the tail at its right. */
+.status-table th:last-child .status-tip { left: auto; right: -6px; transform: translateY(-4px); }
+.status-table th:last-child .status-tip::before { left: auto; right: 9px; }
+
+.status-tip-anchor:hover .status-tip,
+.status-tip-anchor:focus-within .status-tip,
+.status-tip-anchor[data-open] .status-tip {
+  opacity: 1;
+  visibility: visible;
+  transform: translate(-50%, 0);
+  transition: opacity var(--dur-short) var(--ease-out), transform var(--dur-short) var(--ease-out), visibility 0s;
+}
+
+.status-table th:last-child .status-tip-anchor:hover .status-tip,
+.status-table th:last-child .status-tip-anchor:focus-within .status-tip,
+.status-table th:last-child .status-tip-anchor[data-open] .status-tip { transform: none; }
 .status-table tbody tr:last-child > * { border-bottom: 0; }
 .status-table thead th { color: var(--color-ink-2); font-family: var(--font-display); font-size: var(--text-sm); font-weight: 500; }
 .status-table tbody th { color: var(--color-ink); font-weight: 500; }
@@ -521,6 +606,7 @@ select:focus-visible {
 @media (prefers-reduced-motion: reduce) {
   .status-capture[data-loading] .status-loading { animation: none; }
   .status-refresh { transition: none; }
+  .status-info, .status-tip { transition: none; }
 }
 
 /* Narrow: the figures two by two, frequency and health side by side, the table scrolls inside its panel. */

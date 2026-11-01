@@ -1,23 +1,79 @@
 ---
 import { FEEDS } from '../lib/landing-status';
+
+// Each time column carries a short note for readers without a technical background; the three must be told apart.
+const columns = [
+  { key: 'transitData', label: 'Transit data' },
+  {
+    key: 'lastChecked',
+    label: 'Last checked',
+    note: 'When we last asked TransLink for new data. Every try counts, even one that failed.',
+  },
+  {
+    key: 'dataAge',
+    label: 'Data age',
+    note: 'How old our newest data is, counted from when TransLink created it.',
+  },
+  {
+    key: 'transitLag',
+    label: 'Transit lag at capture',
+    note: 'How old the data already was when it reached us. Lower means fresher.',
+  },
+];
 ---
 
 <section class="detail-panel" aria-label="Details">
   <table class="status-table">
     <caption class="visually-hidden">Landing status by feed</caption>
     <thead>
-      <tr><th scope="col">Feed</th><th scope="col">Transit data</th><th scope="col">Last checked</th><th scope="col">Captured since</th><th scope="col">Transit lag at capture</th></tr>
+      <tr>
+        <th scope="col">Feed</th>
+        {columns.map(({ key, label, note }) => (
+          <th scope="col">
+            {note ? (
+              <span class="status-th">
+                {label}
+                <span class="status-tip-anchor" data-tip>
+                  <button type="button" class="status-info" aria-label={`About ${label}`}
+                    aria-describedby={`status-tip-${key}`} aria-expanded="false">i</button>
+                  <span class="status-tip" role="tooltip" id={`status-tip-${key}`}>{note}</span>
+                </span>
+              </span>
+            ) : label}
+          </th>
+        ))}
+      </tr>
     </thead>
     <tbody>
       {FEEDS.map(({ type, name }) => (
         <tr data-status-row={type}>
           <th scope="row">{name}</th>
-          <td data-cell="transitData" data-tone="muted">–</td>
-          <td data-cell="lastChecked" data-tone="muted">–</td>
-          <td data-cell="capturedSince" data-tone="muted">–</td>
-          <td data-cell="transitLag" data-tone="muted">–</td>
+          {columns.map(({ key }) => <td data-cell={key} data-tone="muted">–</td>)}
         </tr>
       ))}
     </tbody>
   </table>
 </section>
+
+<script>
+  // Hover and keyboard focus open a note by CSS; a click or tap pins it open, Escape or a click elsewhere closes it.
+  const anchors = [...document.querySelectorAll<HTMLElement>('[data-tip]')];
+  const close = (except?: HTMLElement) => {
+    for (const anchor of anchors) {
+      if (anchor === except) continue;
+      delete anchor.dataset.open;
+      anchor.querySelector('button')?.setAttribute('aria-expanded', 'false');
+    }
+  };
+  for (const anchor of anchors) {
+    anchor.querySelector('button')?.addEventListener('click', (event) => {
+      event.stopPropagation();
+      const open = anchor.dataset.open === undefined;
+      close(anchor);
+      if (open) anchor.dataset.open = ''; else delete anchor.dataset.open;
+      anchor.querySelector('button')?.setAttribute('aria-expanded', String(open));
+    });
+  }
+  document.addEventListener('click', () => close());
+  document.addEventListener('keydown', (event) => { if (event.key === 'Escape') close(); });
+</script>

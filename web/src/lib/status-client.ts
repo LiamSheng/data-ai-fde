@@ -104,7 +104,7 @@ export function startStatusBar(doc: Document, url = STATUS_URL): void {
   function renderTable(view: StatusView) {
     for (const row of rows) {
       const data = view.rows.find((r) => r.type === row.dataset.statusRow)!;
-      for (const key of ['transitData', 'lastChecked', 'capturedSince', 'transitLag'] as const) {
+      for (const key of ['transitData', 'lastChecked', 'dataAge', 'transitLag'] as const) {
         const el = row.querySelector<HTMLElement>(`[data-cell="${key}"]`)!;
         el.dataset.tone = data[key].tone;
         if (el.textContent !== data[key].text) el.textContent = data[key].text;

@@ -73,7 +73,7 @@ export interface Cell {
 export interface StatusView {
   health: Cell & { note: string | null };
   metrics: { vehicles: Cell; trips: Cell; alerts: Cell; maxLag: Cell };
-  rows: { type: FeedType; name: string; transitData: Cell; lastChecked: Cell; capturedSince: Cell; transitLag: Cell }[];
+  rows: { type: FeedType; name: string; transitData: Cell; lastChecked: Cell; dataAge: Cell; transitLag: Cell }[];
 }
 
 const ERROR: Cell = { text: 'Error', tone: 'error' };
@@ -84,10 +84,10 @@ export function relativeTime(at: string, now: Date): string {
   return minutes < 1 ? 'just now' : `${minutes} min ago`;
 }
 
-/** "3 min 03 s ago": to the second, seconds always two digits so the text keeps its width as it counts. */
-export function elapsedToSecond(at: string, now: Date): string {
+/** An age like "3 min 03 s": to the second, seconds always two digits so the text keeps its width as it counts. */
+export function ageToSecond(at: string, now: Date): string {
   const total = Math.max(0, Math.floor((now.getTime() - Date.parse(at)) / 1000));
-  return `${Math.floor(total / 60)} min ${String(total % 60).padStart(2, '0')} s ago`;
+  return `${Math.floor(total / 60)} min ${String(total % 60).padStart(2, '0')} s`;
 }
 
 export function isExpired(latest: LatestStatus, now: Date): boolean {
@@ -139,7 +139,7 @@ export function buildView(latest: LatestStatus | null, now: Date, refreshFailed 
       health: { text: 'Unavailable', tone: 'error', note: 'Status not reachable' },
       metrics: { vehicles: ERROR, trips: ERROR, alerts: ERROR, maxLag: ERROR },
       rows: FEEDS.map(({ type, name }) => ({
-        type, name, transitData: ERROR, lastChecked: ERROR, capturedSince: ERROR, transitLag: ERROR,
+        type, name, transitData: ERROR, lastChecked: ERROR, dataAge: ERROR, transitLag: ERROR,
       })),
     };
   }
@@ -152,16 +152,16 @@ export function buildView(latest: LatestStatus | null, now: Date, refreshFailed 
     const lastChecked: Cell = attempt
       ? { text: relativeTime(attempt.cycle_completed_at_utc, now), tone: expired ? 'error' : 'normal' }
       : NA;
-    // "Captured since": the age of the newest data held, from its feed header timestamp.
-    let capturedSince: Cell;
-    if (!attempt) capturedSince = NA;
-    else if (!feed.last_success_feed_timestamp) capturedSince = ERROR;
+    // "Data age": how old the newest data held is, from its feed header timestamp.
+    let dataAge: Cell;
+    if (!attempt) dataAge = NA;
+    else if (!feed.last_success_feed_timestamp) dataAge = ERROR;
     // Behind "Last checked" whenever the latest attempt did not count as a success.
-    else capturedSince = {
-      text: elapsedToSecond(feed.last_success_feed_timestamp, now),
+    else dataAge = {
+      text: ageToSecond(feed.last_success_feed_timestamp, now),
       tone: succeeded(attempt) ? 'normal' : 'error',
     };
-    return { type, name, transitData: transitData(attempt), lastChecked, capturedSince, transitLag: lag(attempt) };
+    return { type, name, transitData: transitData(attempt), lastChecked, dataAge, transitLag: lag(attempt) };
   });
 
   const normal = feeds.every((feed) => succeeded(feed.last_attempt));
@@ -201,7 +201,7 @@ function markKept(view: StatusView): StatusView {
       ...row,
       transitData: warn(row.transitData),
       lastChecked: warn(row.lastChecked),
-      capturedSince: warn(row.capturedSince),
+      dataAge: warn(row.dataAge),
       transitLag: warn(row.transitLag),
     })),
   };
@@ -237,7 +237,7 @@ export function nextFetchDelay(latest: LatestStatus | null, now: Date, missesSin
 }
 
 /**
- * Milliseconds until the next whole second, when "Captured since" changes (feed timestamps are whole seconds).
+ * Milliseconds until the next whole second, when "Data age" changes (feed timestamps are whole seconds).
  * Each tick recomputes from the system clock rather than adding a second, so a laptop that slept or a background
  * tab whose timers were held back shows the true age on the next tick.
  */
