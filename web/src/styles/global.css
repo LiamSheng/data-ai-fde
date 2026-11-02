@@ -1,7 +1,7 @@
 /* Hallmark · shape: app screen · genre: modern-minimal · theme: Cobalt (by request) · redesign: full
- * nav: a hairline bar, the wordmark left and the pages as keys on a sunken tray at the right · signature: the ASCII field, sparse strands crossing behind the panels, pipeline code and assistant steps in bold over lighter symbols · states: map loading, waiting (no key), failed, loaded; details empty; chat empty; blog empty
+ * nav: a hairline bar, the wordmark left and the pages as keys on a sunken tray at the right · signature: a pale cobalt aurora hanging from the header, seen blurred through the glass panels · states: map loading, waiting (no key), failed, loaded; details empty; chat empty; blog empty
  * axes: light/grotesk-sans/cool · posture: restrained · contrast: pass · copy: verbatim (pinned by tests/pages.test.mjs) · v2.0.0 */
-/* Hallmark · pre-emit critique: P4 H4 E4 S4 R4 V5 · weakest: R, the field surrounds a live map; the panels cover it whole and it stops one row below them, so it shows only as thin strands in the gutters and the gaps */
+/* Hallmark · pre-emit critique: P4 H4 E4 S4 R4 V5 · weakest: R, the aurora is atmosphere, not the product's own traffic; it shows only above the panels, in the gaps and through the glass */
 /* Hallmark · waive 75 · the 10px links and buttons are inside the Google map canvas · the map attribution is drawn by the Google SDK, not by this page */
 /* Hallmark · waive 39b · the 14px button is the keyboard shortcuts control of the Google map · the Google SDK sizes its own controls over the map data, and they load with it */
 /* Hallmark · answered F1 · the map error line keeps its straight apostrophe because tests/pages.test.mjs matches it verbatim */
@@ -27,11 +27,11 @@
   --gray-7: var(--color-paper-2);
   --selection: var(--color-accent-wash);
   --selection-foreground: var(--color-ink);
-  /* The Map page's column, a fixed share of the window so the gutters the field runs in keep their proportion;
+  /* The Map page's column, a fixed share of the window so the gutters keep their proportion;
    * the header follows it on every page. Capped for very wide screens. */
   --lab-column: min(84vw, 180rem);
   --lab-workspace-height: clamp(30rem, calc(100svh - var(--sl-nav-height) - 2 * var(--space-2xl)), 54rem);
-  /* The gaps between panels are whole field cells, so a channel of glyphs runs through each. */
+  /* The gaps between panels, in whole cells of the theme's 8 by 16 grid. */
   --lab-gap-x: calc(3 * var(--cell-w));
   --lab-gap-y: calc(2 * var(--cell-h));
   /* The panels' corners: one small radius, no cuts. */
@@ -50,11 +50,14 @@
    * failed refresh. Both stay close to the ink's lightness so they read as text, not alarms. */
   --color-status-error: oklch(50% 0.14 27);
   --color-status-warn: oklch(58% 0.11 62);
-  /* The ASCII field in cool greys (2026-11-01: grey, not blue, so the status figures are the only blue). */
-  --color-field-1: oklch(86% 0.006 255);
-  --color-field-2: oklch(77% 0.008 255);
-  --color-field-3: oklch(64% 0.01 255);
-  --color-field-4: oklch(46% 0.012 258);
+  /* The aurora (React Bits Aurora, ported in src/lib/aurora.ts), left to right: white, a low-chroma lavender,
+   * a pale cobalt, a short stretch of the deep cobalt for depth, white again. Five stops is the shader's limit. */
+  --color-aurora-1: #ffffff;
+  --color-aurora-2: oklch(78% 0.07 295);
+  --color-aurora-3: #91aff2;
+  --color-aurora-4: var(--color-accent);
+  --color-aurora-5: #ffffff;
+  --lab-aurora-height: 37.5rem;
   /* The map takes this share of the band; the table below it takes what its rows need. */
   --lab-map-height: calc(var(--lab-workspace-height) * 0.66);
   /* Panel padding follows the window; the type does not. */
@@ -172,29 +175,26 @@ select:focus-visible {
 .page-intro { color: var(--color-ink-2); }
 
 /* The theme zeroes content padding on wide screens; the Map page keeps its side margins. */
-:root:not([data-has-sidebar]) .content-panel { position: relative; padding-inline: 0; }
+/* The aurora hangs from main, whose top is the header's bottom edge, not from the panel, which Starlight insets. */
+:root:not([data-has-sidebar]) main { position: relative; }
+:root:not([data-has-sidebar]) .content-panel { padding-inline: 0; }
 
 @media (min-width: 48rem) {
   :root:not([data-has-sidebar]) .content-panel { padding-inline: var(--sl-content-pad-x); }
 }
 
-/* Without script, a dot on every cell of the field stands in for it. */
-:root:not([data-has-sidebar]) .content-panel:not(:has(.ascii-field[data-live])) {
-  background-image: radial-gradient(circle at 50% 50%, var(--color-field-2) 1px, transparent 1.5px);
-  background-size: var(--cell-w) var(--cell-h);
-}
-
-/* The field spans the whole Map page band and draws over both panels; the pointer passes through. */
-.ascii-field {
+/* The aurora hangs from the bottom of the header across the Map page band. It comes before the workspace, so the map
+ * covers it and the glass panels blur it. Without script or WebGL 2 the plain paper shows. */
+.aurora {
   position: absolute;
-  inset: 0;
-  z-index: var(--z-raised);
-  width: 100%;
-  height: 100%;
+  inset: 0 0 auto;
+  height: var(--lab-aurora-height);
   pointer-events: none;
 }
 
-/* Workspace: the status row on top; the map over the details on the left and the chat beside them; the gaps carry the field. */
+.aurora canvas { display: block; width: 100%; height: 100%; }
+
+/* Workspace: the status row on top; the map over the details on the left and the chat beside them; the aurora shows in the gaps. */
 .workspace {
   display: grid;
   grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
@@ -238,7 +238,7 @@ select:focus-visible {
 .map-panel[data-map-state='waiting'] .map-canvas,
 .map-panel[data-map-state='failed'] .map-canvas { visibility: hidden; }
 
-/* The loader is the one loop besides the field; it stops under reduced motion. */
+/* The loader is the one loop besides the aurora; it stops under reduced motion. */
 .map-pulse {
   width: var(--cell-w);
   height: var(--cell-h);
@@ -253,7 +253,7 @@ select:focus-visible {
 .map-error-nodes { fill: var(--color-ink); }
 .map-error-loose { fill: var(--color-accent); }
 
-/* Details and chat: frosted glass over the field. They sit above the canvas, so the strands pass under them blurred;
+/* Details, chat and status: frosted glass over the aurora, which shows through them blurred;
  * the glass stays mostly opaque so the text they will hold reads first. */
 .detail-panel,
 .chat-panel,
@@ -273,7 +273,7 @@ select:focus-visible {
 .detail-panel { grid-column: 1; grid-row: 3; place-items: stretch; padding: var(--status-pad-y) var(--status-pad-x); }
 .chat-panel { grid-column: 2; grid-row: 2 / span 2; }
 
-/* Without backdrop blur the glass would show the strands sharp, so it turns solid paper instead. */
+/* Without backdrop blur the glass would show the aurora unsoftened, so it turns solid paper instead. */
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
   .detail-panel,
   .chat-panel,
@@ -659,7 +659,7 @@ select:focus-visible {
 
 .sl-markdown-content .empty-state h2 { margin: 0 0 var(--space-xs); padding-block-start: 0; }
 
-/* Tablet and below: stack map, details, chat; the field turns to flow top to bottom. */
+/* Tablet and below: stack map, details, chat. */
 @media (max-width: 48rem) {
   /* Phones keep the page padding as their only gutter. */
   :root,
