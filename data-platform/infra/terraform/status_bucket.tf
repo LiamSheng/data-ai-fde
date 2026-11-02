@@ -23,9 +23,9 @@ resource "google_storage_bucket" "gtfs_rt_status" {
     retention_duration_seconds = 0
   }
 
-  # 浏览器直接从网站读取 latest.json。网站部署前只允许本地开发地址（web/README）。
+  # 浏览器直接从网站读取 latest.json：正式站点（KAN-28）和本地开发地址（web/README）。
   cors {
-    origin          = ["http://127.0.0.1:4321", "http://localhost:4321"]
+    origin          = ["https://ai.linzi.info", "http://127.0.0.1:4321", "http://localhost:4321"]
     method          = ["GET", "HEAD"]
     response_header = ["Content-Type"]
     max_age_seconds = 300
