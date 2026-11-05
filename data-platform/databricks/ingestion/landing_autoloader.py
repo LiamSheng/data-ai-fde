@@ -80,10 +80,15 @@ try:
                 SparkTables(spark, namespace),
             ),
         }
-except Exception as exc:  # noqa: BLE001 - suppress connector text and credentials.
+except Exception as exc:  # noqa: BLE001
+    # Showcase branch: surface the cause in the run output. Spark and Auto Loader
+    # messages name paths and error classes, not credentials; the tail keeps the
+    # Python traceback of a failed foreachBatch.
+    detail = re.sub(r"(?i)(token|secret|password|key)=\S+", r"\1=***", str(exc))
     print(json.dumps({"status": "FAIL", "exception_type": type(exc).__name__}))
+    print(detail[-6000:])
     raise RuntimeError(
-        "Bronze ingestion failed; inspect task diagnostics without sharing credentials."
+        f"Bronze ingestion failed: {type(exc).__name__}: {detail[-1500:]}"
     ) from None
 
 # COMMAND ----------
