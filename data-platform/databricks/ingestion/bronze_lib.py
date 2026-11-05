@@ -24,6 +24,7 @@ BUCKET = "gs://transit-realtime-landing-26/"
 OWNER = "transit-realtime-pipeline"
 CONTRACT = "1"
 SCHEMAS = {
+    "service_alerts": "payload_sha256 STRING, entity_index BIGINT, entity_id STRING, feed_timestamp TIMESTAMP, incrementality STRING, has_alert BOOLEAN, is_deleted BOOLEAN, cause STRING, effect STRING, severity_level STRING, header_text STRING, description_text STRING, url STRING, tts_header_text STRING, cause_detail STRING, effect_detail STRING, informed_entity ARRAY<STRUCT<agency_id: STRING, route_id: STRING, route_type: INT, direction_id: INT, stop_id: STRING, trip: STRUCT<trip_id: STRING, route_id: STRING, direction_id: INT, start_date: STRING, start_time: STRING, schedule_relationship: STRING>>>, active_period ARRAY<STRUCT<start_utc: TIMESTAMP, end_utc: TIMESTAMP>>, raw_entity_json STRING, parser_version STRING, record_sha256 STRING, ingested_at_utc TIMESTAMP",
     "capture_attempts": "attempt_id STRING, poll_cycle_id STRING, feed_type STRING, outcome STRING, http_status INT, payload_ref STRING, payload_sha256 STRING, payload_bytes BIGINT, started_at_utc TIMESTAMP, completed_at_utc TIMESTAMP, feed_timestamp TIMESTAMP, feed_age_seconds DOUBLE, incrementality STRING, entity_count BIGINT, vehicle_count BIGINT, feed_version STRING, audit_ref STRING, audit_sha256 STRING, raw_audit_json STRING, parser_version STRING, record_sha256 STRING, ingested_at_utc TIMESTAMP",
     "vehicle_positions": "payload_sha256 STRING, entity_index BIGINT, entity_id STRING, feed_timestamp TIMESTAMP, incrementality STRING, has_vehicle BOOLEAN, is_deleted BOOLEAN, vehicle_id STRING, trip_id STRING, route_id STRING, vehicle_timestamp TIMESTAMP, latitude DOUBLE, longitude DOUBLE, raw_entity_json STRING, parser_version STRING, record_sha256 STRING, ingested_at_utc TIMESTAMP",
     "trip_updates": "payload_sha256 STRING, entity_index BIGINT, entity_id STRING, feed_timestamp TIMESTAMP, incrementality STRING, has_trip_update BOOLEAN, trip_id STRING, route_id STRING, direction_id INT, start_date STRING, trip_schedule_relationship STRING, trip_timestamp TIMESTAMP, vehicle_id STRING, update_index BIGINT, stop_sequence BIGINT, stop_id STRING, stop_schedule_relationship STRING, arrival_time TIMESTAMP, arrival_delay INT, departure_time TIMESTAMP, departure_delay INT, raw_trip_json STRING, raw_stop_time_update_json STRING, parser_version STRING, record_sha256 STRING, ingested_at_utc TIMESTAMP",
@@ -32,6 +33,7 @@ SCHEMAS = {
     "calendar_dates": "static_payload_sha256 STRING, service_id STRING, date STRING, exception_type STRING, raw_calendar_date_json STRING, parser_version STRING, record_sha256 STRING, ingested_at_utc TIMESTAMP",
 }
 KEYS = {
+    "service_alerts": ["payload_sha256", "entity_index"],
     "capture_attempts": ["attempt_id"],
     "vehicle_positions": ["payload_sha256", "entity_index"],
     "trip_updates": ["payload_sha256", "entity_index", "update_index"],

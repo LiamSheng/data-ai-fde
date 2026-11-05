@@ -256,6 +256,103 @@ STOP_RELATIONSHIP = (
 )
 
 
+def translated_text(message):
+    """English first; a single other translation is unambiguous, otherwise unknown."""
+    translations = list(message.translation)
+    selected = next((t for t in translations if t.language == "en"), None)
+    if selected is None and len(translations) == 1:
+        selected = translations[0]
+    return optional(selected, "text")
+
+
+def alert_selector(selector):
+    """A fixed nested shape, preserving absence separately from explicit zero values."""
+    trip = optional(selector, "trip")
+    return {
+        **{
+            name: optional(selector, name)
+            for name in (
+                "agency_id",
+                "route_id",
+                "route_type",
+                "direction_id",
+                "stop_id",
+            )
+        },
+        "trip": {
+            **{
+                name: optional(trip, name)
+                for name in (
+                    "trip_id",
+                    "route_id",
+                    "direction_id",
+                    "start_date",
+                    "start_time",
+                )
+            },
+            "schedule_relationship": optional(
+                trip, "schedule_relationship", TRIP_RELATIONSHIP
+            ),
+        }
+        if trip is not None
+        else None,
+    }
+
+
+def alert_records(audit, payload):
+    """One row per source entity; non-alert arrays are NULL, present empty lists stay []."""
+    sha, feed, timestamp, incrementality = verified_feed(
+        audit, payload, "service_alerts", required_counts=("alert_count",)
+    )
+    rows = []
+    for index, entity in enumerate(feed.entity):
+        alert = optional(entity, "alert")
+        rows.append(
+            {
+                "payload_sha256": sha,
+                "entity_index": index,
+                "entity_id": entity.id,
+                "feed_timestamp": timestamp,
+                "incrementality": incrementality,
+                "has_alert": alert is not None,
+                "is_deleted": optional(entity, "is_deleted"),
+                "cause": optional(alert, "cause", gtfs_realtime_pb2.Alert.Cause.Name),
+                "effect": optional(
+                    alert, "effect", gtfs_realtime_pb2.Alert.Effect.Name
+                ),
+                "severity_level": optional(
+                    alert, "severity_level", gtfs_realtime_pb2.Alert.SeverityLevel.Name
+                ),
+                **{
+                    field: optional(alert, field, translated_text)
+                    for field in (
+                        "header_text",
+                        "description_text",
+                        "url",
+                        "tts_header_text",
+                        "cause_detail",
+                        "effect_detail",
+                    )
+                },
+                "informed_entity": [alert_selector(s) for s in alert.informed_entity]
+                if alert is not None
+                else None,
+                "active_period": [
+                    {
+                        "start_utc": optional(p, "start", epoch_utc),
+                        "end_utc": optional(p, "end", epoch_utc),
+                    }
+                    for p in alert.active_period
+                ]
+                if alert is not None
+                else None,
+                "raw_entity_json": raw_json(entity),
+                "parser_version": PARSER_VERSION,
+            }
+        )
+    return rows
+
+
 def trip_update_records(audit, payload):
     """One row per stop time update; a trip without updates keeps one null-stop row."""
     sha, feed, timestamp, incrementality = verified_feed(

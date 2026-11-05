@@ -21,6 +21,29 @@ The execution guide is the local `docs/data-platform/ops/dbt-core-acceptance.md`
 - DAB describes one manual Job and its ordered tasks. Terraform retains ownership
   of Landing access and IAM. No schedules or warehouse resources are defined here.
 
+### Service Alerts conversion contract
+
+`alert_records()` preserves one Bronze row per source entity, keyed by
+`(payload_sha256, entity_index)`, with source array order unchanged. It requires an
+audited `alert_count` matching the payload. Missing optional enums and selector
+fields stay NULL; explicit zero values remain zero. Text selects `en`, otherwise a
+sole translation, otherwise NULL. Non-alert entities have NULL `informed_entity`
+and `active_period`; present alerts retain empty arrays. Missing period bounds
+stay NULL and mean unbounded, while a source period with neither bound is kept
+for downstream quality checks. Images remain in `raw_entity_json`.
+
+The offline warehouse translates complete Bronze DDL, including nested
+`ARRAY<STRUCT<...>>` types and UTC timestamps (`dev/tests`). The ingestion unit
+suite exercises a private 272-entity/888-selector snapshot when available; that
+smoke test skips explicitly in clones without the fixture.
+
+`service_alerts` is in the Bronze contract (`SCHEMAS`) but not yet a dbt source:
+the deployed Job does not load it, so its source tests would fail `dbt build`.
+It joins `sources/bronze.yml` and local replay together with the loader change
+(KAN-33). Local nested storage checks do not validate every Spark SQL array
+operation; translated outer explode drops parents with empty or NULL arrays, so
+any SQL model that explodes a Bronze array needs unit cases for both.
+
 ## Environment
 
 Python 3.12, Core 1.12.5, adapter 1.12.7. The adapter currently excludes Core
