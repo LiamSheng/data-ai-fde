@@ -29,3 +29,4 @@ resources:
               landing_root: ${var.landing_root}
               max_files_per_trigger: ${var.max_files_per_trigger}
               mode: stream
+              modified_after: ""

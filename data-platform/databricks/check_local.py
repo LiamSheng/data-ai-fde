@@ -106,8 +106,15 @@ run(
     ]
 )
 jobs = bundle["resources"]["jobs"]
-if set(jobs) != {"transit_slice", "transit_bronze_autoloader"} or any(
-    "schedule" in job or "trigger" in job for job in jobs.values()
+# Branch showcase: transit_showcase is the one scheduled Job.
+if set(jobs) != {
+    "transit_slice",
+    "transit_bronze_autoloader",
+    "transit_showcase",
+} or any(
+    "schedule" in job or "trigger" in job
+    for key, job in jobs.items()
+    if key != "transit_showcase"
 ):
     raise SystemExit("Unexpected scheduled resource")
 for job in jobs.values():
@@ -120,6 +127,8 @@ for job in jobs.values():
 notebooks = {
     ("transit_slice", "landing_to_bronze"): "landing_to_bronze.py",
     ("transit_bronze_autoloader", "landing_autoloader"): "landing_autoloader.py",
+    ("transit_showcase", "landing_autoloader"): "landing_autoloader.py",
+    ("transit_showcase", "showcase_export"): "../showcase/showcase_export.py",
 }
 for (job_key, task_key), notebook in notebooks.items():
     ingestion = next(

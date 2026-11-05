@@ -1,0 +1,155 @@
+---
+// Branch `showcase`: a section under the workspace, filled in the browser from showcase.json (src/lib/showcase-client.ts).
+// It is rendered hidden and only shown once a valid file loads, so without the file the page is unchanged.
+---
+
+<section class="showcase not-content" aria-labelledby="showcase-title" data-showcase hidden>
+  <header class="sc-head">
+    <h2 id="showcase-title" class="sc-title">Live from the lakehouse</h2>
+    <p class="sc-sub">
+      Every 10 minutes a Databricks job lands TransLink's newest feeds into the Bronze layer with Auto Loader,
+      then summarises them here. <span data-sc="generated"></span>
+    </p>
+  </header>
+
+  <div class="sc-grid">
+    <article class="sc-card" aria-labelledby="sc-vehicles">
+      <h3 id="sc-vehicles" class="sc-card-title">Vehicles on the road</h3>
+      <p class="sc-figure num" data-sc="vehicles-total">–</p>
+      <p class="sc-note" data-sc="vehicles-note"></p>
+      <ol class="sc-bars" data-sc="vehicles-routes" aria-label="Routes with the most vehicles"></ol>
+    </article>
+
+    <article class="sc-card" aria-labelledby="sc-delays">
+      <h3 id="sc-delays" class="sc-card-title">Delays in the last hour</h3>
+      <p class="sc-figure num" data-sc="delays-late">–</p>
+      <p class="sc-note" data-sc="delays-note"></p>
+      <ol class="sc-bars" data-sc="delays-routes" aria-label="Routes with the highest average delay"></ol>
+    </article>
+
+    <article class="sc-card" aria-labelledby="sc-alerts">
+      <h3 id="sc-alerts" class="sc-card-title">Service alerts</h3>
+      <p class="sc-figure num" data-sc="alerts-total">–</p>
+      <p class="sc-note" data-sc="alerts-note"></p>
+      <ul class="sc-chips" data-sc="alerts-effects" aria-label="Alerts by effect"></ul>
+      <ul class="sc-alerts" data-sc="alerts-recent" aria-label="Most recent alerts"></ul>
+    </article>
+
+    <article class="sc-card" aria-labelledby="sc-health">
+      <h3 id="sc-health" class="sc-card-title">Pipeline health</h3>
+      <table class="sc-table">
+        <thead>
+          <tr><th scope="col">Feed</th><th scope="col">Captures</th><th scope="col">Failed</th><th scope="col">Newest data</th></tr>
+        </thead>
+        <tbody data-sc="health-rows"></tbody>
+      </table>
+      <p class="sc-note" data-sc="health-note"></p>
+    </article>
+  </div>
+</section>
+
+<script>
+  import { startShowcase } from '../lib/showcase-client';
+
+  startShowcase(document);
+</script>
+
+<style>
+  .showcase { margin-block: 0 var(--space-2xl); }
+  .showcase[hidden] { display: none; }
+
+  .sc-head { margin-block-end: var(--space-lg); }
+  .sc-title {
+    margin: 0;
+    font-family: var(--font-display);
+    font-size: var(--text-display-s);
+    font-weight: var(--display-weight);
+    letter-spacing: var(--tracking-display);
+    color: var(--color-ink);
+  }
+  .sc-sub { max-width: 60rem; margin: var(--space-2xs) 0 0; color: var(--color-ink-2); font-size: var(--text-md); }
+
+  .sc-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-lg); }
+
+  .sc-card {
+    min-width: 0;
+    padding: var(--space-lg);
+    border: var(--rule-hair) solid var(--color-glass-edge);
+    border-radius: var(--lab-radius, var(--radius-card));
+    background: linear-gradient(160deg, var(--color-glass-hi), var(--color-glass-lo));
+    box-shadow: inset 1px 1px 0 var(--color-glass-rim-light), inset -1px -1px 0 var(--color-glass-rim-dark), var(--shadow-card);
+    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(1.4);
+    backdrop-filter: blur(var(--glass-blur)) saturate(1.4);
+  }
+  .sc-card-title { margin: 0; font-family: var(--font-body); font-size: var(--text-sm); font-weight: 500; color: var(--color-muted); }
+  .sc-figure {
+    margin: var(--space-xs) 0 0;
+    font-family: var(--font-display);
+    font-size: var(--text-3xl);
+    font-weight: var(--display-weight);
+    font-variant-numeric: tabular-nums;
+    color: var(--color-ink);
+  }
+  .sc-note { margin: var(--space-2xs) 0 0; font-size: var(--text-sm); color: var(--color-ink-2); }
+
+  .sc-bars { display: grid; gap: var(--space-xs); margin: var(--space-md) 0 0; padding: 0; list-style: none; }
+  .sc-bars :global(.sc-bar) {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: var(--space-2xs) var(--space-sm);
+    font-size: var(--text-sm);
+  }
+  .sc-bars :global(.sc-bar-name) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .sc-bars :global(.sc-bar-value) { color: var(--color-ink-2); font-variant-numeric: tabular-nums; }
+  .sc-bars :global(.sc-bar-track) {
+    grid-column: 1 / -1;
+    height: 4px;
+    border-radius: var(--radius-pill);
+    background: var(--color-paper-3);
+    overflow: hidden;
+  }
+  .sc-bars :global(.sc-bar-fill) {
+    display: block;
+    height: 100%;
+    border-radius: inherit;
+    background: var(--color-accent);
+    transition: width var(--dur-long) var(--ease-out);
+  }
+
+  .sc-chips { display: flex; flex-wrap: wrap; gap: var(--space-2xs); margin: var(--space-md) 0 0; padding: 0; list-style: none; }
+  .sc-chips :global(.sc-chip) {
+    padding: var(--space-3xs) var(--space-xs);
+    border-radius: var(--radius-pill);
+    background: var(--color-accent-wash);
+    color: var(--color-accent-deep);
+    font-size: var(--text-xs);
+  }
+
+  .sc-alerts { display: grid; gap: var(--space-sm); margin: var(--space-md) 0 0; padding: 0; list-style: none; }
+  .sc-alerts :global(.sc-alert) { padding-block-start: var(--space-sm); border-top: var(--rule-hair) solid var(--color-rule); }
+  .sc-alerts :global(.sc-alert-head) { margin: 0; font-size: var(--text-sm); color: var(--color-ink); }
+  .sc-alerts :global(.sc-alert-meta) { margin: var(--space-3xs) 0 0; font-size: var(--text-xs); color: var(--color-muted); }
+
+  .sc-table { width: 100%; margin: var(--space-md) 0 0; border-collapse: collapse; font-size: var(--text-sm); font-variant-numeric: tabular-nums; }
+  .sc-table th,
+  .sc-table :global(td),
+  .sc-table :global(th) {
+    padding: var(--space-xs) var(--space-sm) var(--space-xs) 0;
+    border-bottom: var(--rule-hair) solid var(--color-rule);
+    text-align: left;
+    font-weight: 400;
+  }
+  .sc-table thead th { color: var(--color-muted); font-size: var(--text-xs); }
+  .sc-table :global(.sc-warn) { color: var(--color-status-warn); }
+
+  @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+    .sc-card { background: var(--color-paper-2); }
+  }
+  @media (max-width: 48rem) {
+    .sc-grid { grid-template-columns: minmax(0, 1fr); }
+    .sc-card { overflow-x: auto; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .sc-bars :global(.sc-bar-fill) { transition: none; }
+  }
+</style>

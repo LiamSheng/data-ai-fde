@@ -257,7 +257,9 @@ def _path_not_found(error):
     return condition() == "PATH_NOT_FOUND" or "Path does not exist" in str(error)
 
 
-def run_autoloader(spark, namespace, landing_root, checkpoint_root, max_files):
+def run_autoloader(
+    spark, namespace, landing_root, checkpoint_root, max_files, modified_after=""
+):
     """Drain both audit prefixes with availableNow, one checkpoint per prefix.
 
     Each batch builds its own adapters from the batch's session: on serverless the
@@ -277,13 +279,18 @@ def run_autoloader(spark, namespace, landing_root, checkpoint_root, max_files):
             ingest_audits(landing, SparkTables(session, namespace), files)
 
     for prefix in AUDIT_PREFIXES:
-        query = (
+        reader = (
             spark.readStream.format("cloudFiles")
             .option("cloudFiles.format", "binaryFile")
             .option("cloudFiles.includeExistingFiles", "true")
             .option("cloudFiles.maxFilesPerTrigger", str(max_files))
             .option("pathGlobFilter", "*.json")
-            .load(landing_root + prefix)
+        )
+        # Showcase: skip history older than this instant (a fresh checkpoint only).
+        if modified_after:
+            reader = reader.option("modifiedAfter", modified_after)
+        query = (
+            reader.load(landing_root + prefix)
             .writeStream.foreachBatch(batch)
             .option("checkpointLocation", checkpoint_root + prefix.strip("/") + "/")
             .trigger(availableNow=True)

@@ -25,12 +25,15 @@ dbutils.widgets.text("bronze_schema", "transit_dev_bronze")
 dbutils.widgets.text("landing_root", bronze_lib.BUCKET)
 dbutils.widgets.text("max_files_per_trigger", "50")
 dbutils.widgets.text("mode", "stream")
+# Showcase: blank reads all of Landing; a UTC instant (2026-11-04T00:00:00) skips older files.
+dbutils.widgets.text("modified_after", "")
 
 catalog = identifier(dbutils.widgets.get("catalog"))
 schema = identifier(dbutils.widgets.get("bronze_schema"))
 landing_root = dbutils.widgets.get("landing_root")
 max_files = dbutils.widgets.get("max_files_per_trigger")
 mode = dbutils.widgets.get("mode")
+modified_after = dbutils.widgets.get("modified_after")
 if not (schema.startswith("transit_") and schema.endswith("_bronze")):
     raise ValueError("Use a dedicated transit_*_bronze schema")
 if not re.fullmatch(r"(gs://[a-z0-9._-]+/|/Volumes/[\w/-]+/)", landing_root):
@@ -39,6 +42,10 @@ if not re.fullmatch(r"[1-9][0-9]{0,3}", max_files):
     raise ValueError("max_files_per_trigger must be a positive integer")
 if mode not in {"stream", "replay_quarantine"}:
     raise ValueError("mode must be stream or replay_quarantine")
+if modified_after and not re.fullmatch(
+    r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}", modified_after
+):
+    raise ValueError("modified_after must be blank or YYYY-MM-DDTHH:MM:SS (UTC)")
 
 namespace = f"{catalog}.{schema}"
 checkpoint_root = f"/Volumes/{catalog}/{schema}/checkpoints/landing_autoloader/v1/"
@@ -57,7 +64,12 @@ spark.sql(f"CREATE VOLUME IF NOT EXISTS {namespace}.checkpoints")
 try:
     if mode == "stream":
         bronze_autoloader.run_autoloader(
-            spark, namespace, landing_root, checkpoint_root, int(max_files)
+            spark,
+            namespace,
+            landing_root,
+            checkpoint_root,
+            int(max_files),
+            modified_after,
         )
         result = {"mode": mode}
     else:

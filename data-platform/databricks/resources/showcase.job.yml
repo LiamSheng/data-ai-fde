@@ -1,0 +1,49 @@
+# Branch `showcase` only. Rollback: deploy the bundle from main (the Job disappears),
+# then DROP SCHEMA workspace.transit_showcase_bronze CASCADE and destroy infra/showcase.
+resources:
+  jobs:
+    transit_showcase:
+      name: transit-showcase-${bundle.target}
+      description: >-
+        Every 10 minutes: Auto Loader lands new Landing audits into a separate showcase
+        Bronze schema, then a summary JSON for ai.linzi.info is overwritten from it.
+      max_concurrent_runs: 1
+      timeout_seconds: 3000
+      schedule:
+        quartz_cron_expression: "0 0/10 * * * ?"
+        timezone_id: America/Vancouver
+        pause_status: UNPAUSED
+      environments:
+        - environment_key: showcase
+          spec:
+            environment_version: "4"
+            dependencies:
+              - gtfs-realtime-bindings==3.0.0
+      tasks:
+        - task_key: landing_autoloader
+          environment_key: showcase
+          max_retries: 0
+          disable_auto_optimization: true
+          notebook_task:
+            source: WORKSPACE
+            notebook_path: ../ingestion/landing_autoloader.py
+            base_parameters:
+              catalog: ${var.catalog}
+              bronze_schema: transit_showcase_bronze
+              landing_root: ${var.landing_root}
+              max_files_per_trigger: ${var.max_files_per_trigger}
+              mode: stream
+              modified_after: ${var.showcase_since}
+        - task_key: showcase_export
+          depends_on:
+            - task_key: landing_autoloader
+          environment_key: showcase
+          max_retries: 0
+          disable_auto_optimization: true
+          notebook_task:
+            source: WORKSPACE
+            notebook_path: ../showcase/showcase_export.py
+            base_parameters:
+              catalog: ${var.catalog}
+              bronze_schema: transit_showcase_bronze
+              output_uri: ${var.showcase_output}
