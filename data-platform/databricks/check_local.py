@@ -160,7 +160,8 @@ syntax_nodes = [
     node
     for node in manifest["nodes"].values()
     # Tests of a disabled source (autoloader_bronze off) stay in the manifest, uncompiled.
-    if node["resource_type"] in {"model", "test"} and node["config"].get("enabled", True)
+    if node["resource_type"] in {"model", "test"}
+    and node["config"].get("enabled", True)
 ]
 for node in syntax_nodes:
     # Core/adapter compiled SQL, without warehouse introspection or materialization.
