@@ -201,6 +201,7 @@ def unittest_count(directory):
 
 bronze_count = unittest_count("databricks/ingestion/tests")
 genie_count = unittest_count("databricks/genie/tests")
+warehouse_count = unittest_count("databricks/dbt/dev/tests")
 print(
     json.dumps(
         {
@@ -215,6 +216,7 @@ print(
             "compiled_sql_nodes_syntax_checked": len(syntax_nodes),
             "bronze_local_checks": bronze_count,
             "genie_space_checks": genie_count,
+            "offline_warehouse_checks": warehouse_count,
             "bundle_schema": "installed CLI schema with ASCII substitution identifiers",
             "cloud_execution": "NOT_RUN",
         },

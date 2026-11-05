@@ -47,7 +47,6 @@ GENIE = ROOT / "databricks/genie"
 TARGETS = DBT / "target/duckdb_check"
 # Sources resolve through env_var defaults that stay unrendered in offline compiles.
 BASE_VARS = {"bronze_catalog": "workspace", "bronze_schema": "transit_dev_bronze"}
-SPARK_TO_DUCKDB = {"STRING": "VARCHAR", "TIMESTAMP": "TIMESTAMPTZ"}
 SEED_TYPES = {"string": "VARCHAR", "date": "DATE", "int": "INTEGER", "bigint": "BIGINT"}
 
 
@@ -127,6 +126,15 @@ def duckdb_sql(code):
     return sqlglot.transpile(code, read="databricks", write="duckdb")[0]
 
 
+def bronze_ddl(name, columns):
+    """Translate the whole schema, including nested commas and UTC timestamp fields."""
+    statement = sqlglot.parse_one(f"CREATE TABLE {name} ({columns})", read="databricks")
+    for kind in statement.find_all(sqlglot.exp.DataType):
+        if kind.this == sqlglot.exp.DataType.Type.TIMESTAMP:
+            kind.set("this", sqlglot.exp.DataType.Type.TIMESTAMPTZ)
+    return statement.sql(dialect="duckdb")
+
+
 def relation(name):
     return name.replace("`", '"')
 
@@ -151,14 +159,8 @@ class Warehouse:
             self.con.execute(f"CREATE SCHEMA IF NOT EXISTS {relation(schema)}")
         schemas = bronze_schemas()
         for source in manifest["sources"].values():
-            columns = ", ".join(
-                f"{name} {SPARK_TO_DUCKDB.get(kind, kind)}"
-                for name, kind in (
-                    c.split(" ") for c in schemas[source["name"]].split(", ")
-                )
-            )
             self.con.execute(
-                f"CREATE TABLE {relation(source['relation_name'])} ({columns})"
+                bronze_ddl(relation(source["relation_name"]), schemas[source["name"]])
             )
         for seed in self.of_type("seed"):
             self.load_seed(seed)
@@ -247,6 +249,10 @@ class Warehouse:
 
 
 def comparable(value):
+    if isinstance(value, dict):
+        return {key: comparable(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [comparable(item) for item in value]
     if isinstance(value, dt.datetime):
         return value.strftime("%Y-%m-%d %H:%M:%S")
     if isinstance(value, dt.date):
