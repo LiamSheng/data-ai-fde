@@ -18,8 +18,8 @@ The execution guide is the local `docs/data-platform/ops/dbt-core-acceptance.md`
   `macros/route_delay_summary.sql` and deployed by the Job's
   `dbt run-operation deploy_route_delay_summary` after `dbt build`. Its cases in
   `dev/function_tests.yml` run offline with `dev/duckdb_check.py function`.
-- DAB describes one manual Job and its ordered tasks. Terraform retains ownership
-  of Landing access and IAM. No schedules or warehouse resources are defined here.
+- DAB describes two manual Jobs, the bounded slice and the Auto Loader ingestion.
+  Terraform retains ownership of Landing access and IAM. No schedules or warehouse resources are defined here.
 
 ### Service Alerts conversion contract
 
@@ -37,12 +37,38 @@ The offline warehouse translates complete Bronze DDL, including nested
 suite exercises a private 272-entity/888-selector snapshot when available; that
 smoke test skips explicitly in clones without the fixture.
 
-`service_alerts` is in the Bronze contract (`SCHEMAS`) but not yet a dbt source:
-the deployed Job does not load it, so its source tests would fail `dbt build`.
-It joins `sources/bronze.yml` and local replay together with the loader change
-(KAN-33). Local nested storage checks do not validate every Spark SQL array
-operation; translated outer explode drops parents with empty or NULL arrays, so
-any SQL model that explodes a Bronze array needs unit cases for both.
+`service_alerts` and `quarantine` are written only by the Auto Loader job, so they
+are dbt sources only when the var `autoloader_bronze` is true (local replay sets it).
+The slice Job keeps the default `false` until the cutover (KAN-37), which turns it
+on and then removes the var. Local nested storage checks do not validate every Spark
+SQL array operation; translated outer explode drops parents with empty or NULL
+arrays, so any SQL model that explodes a Bronze array needs unit cases for both.
+
+### Auto Loader ingestion (KAN-35)
+
+`ingestion/landing_autoloader.py` (Job `transit_bronze_autoloader`, manual) drains
+every Landing audit not yet seen, with one Auto Loader checkpoint per audit prefix
+under `/Volumes/<catalog>/<bronze_schema>/checkpoints/landing_autoloader/v1/`.
+
+- Audits drive ingestion: the collector writes a payload before its audit, so a
+  discovered audit always names a payload already in Landing.
+- Every audit becomes a `capture_attempts` row, failed captures included
+  (`is_success` in Silver tells them apart). Only successful audits have their
+  payload read and converted.
+- A file that breaks the source contract (`BronzeContractError`: mismatched hash,
+  size or counts, unreadable audit, protobuf or ZIP, missing payload) gets a
+  `quarantined` event and the batch goes on. Any other error fails the batch; Auto
+  Loader replays it whole and the insert-only merges make the replay a no-op for
+  rows already written.
+- Each batch writes content tables, then `quarantine`, then `capture_attempts`, the
+  commit marker Silver joins on.
+- `mode=replay_quarantine` re-runs unresolved files through the same conversion (for
+  a fixed parser or a late payload) and appends a `resolved` event after the
+  file's `capture_attempts` row.
+- Reset: a new checkpoint directory (bump `v1`) rediscovers all of Landing; every
+  existing row then merges as a no-op.
+- Accept in a scratch schema: copy a few audits and payloads to a Volume and run the
+  Job with `bronze_schema=transit_<name>_bronze` and `landing_root=/Volumes/.../`.
 
 ## Environment
 

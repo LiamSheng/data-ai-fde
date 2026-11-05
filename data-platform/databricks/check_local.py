@@ -106,36 +106,40 @@ run(
     ]
 )
 jobs = bundle["resources"]["jobs"]
-if (
-    set(jobs) != {"transit_slice"}
-    or "schedule" in jobs["transit_slice"]
-    or "trigger" in jobs["transit_slice"]
+if set(jobs) != {"transit_slice", "transit_bronze_autoloader"} or any(
+    "schedule" in job or "trigger" in job for job in jobs.values()
 ):
     raise SystemExit("Unexpected scheduled resource")
-for task in jobs["transit_slice"]["tasks"]:
-    if (
-        task.get("max_retries") != 0
-        or task.get("disable_auto_optimization") is not True
-    ):
-        raise SystemExit("Retry policy differs from bounded manual acceptance")
-ingestion = next(
-    task
-    for task in jobs["transit_slice"]["tasks"]
-    if task["task_key"] == "landing_to_bronze"
-)
-widgets = set(
-    re.findall(
-        r'dbutils\.widgets\.text\(\s*"(\w+)"',
-        (ROOT / "databricks/ingestion/landing_to_bronze.py").read_text(),
+for job in jobs.values():
+    for task in job["tasks"]:
+        if (
+            task.get("max_retries") != 0
+            or task.get("disable_auto_optimization") is not True
+        ):
+            raise SystemExit("Retry policy differs from bounded manual acceptance")
+notebooks = {
+    ("transit_slice", "landing_to_bronze"): "landing_to_bronze.py",
+    ("transit_bronze_autoloader", "landing_autoloader"): "landing_autoloader.py",
+}
+for (job_key, task_key), notebook in notebooks.items():
+    ingestion = next(
+        task for task in jobs[job_key]["tasks"] if task["task_key"] == task_key
     )
-)
-parameters = ingestion["notebook_task"]["base_parameters"]
-if set(parameters) != widgets:
-    raise SystemExit("Job parameters differ from notebook widgets")
-for value in parameters.values():
-    for variable in re.findall(r"\$\{var\.(\w+)\}", value):
-        if variable not in bundle["variables"]:
-            raise SystemExit("Job parameter uses an undefined variable: " + variable)
+    widgets = set(
+        re.findall(
+            r'dbutils\.widgets\.text\(\s*"(\w+)"',
+            (ROOT / "databricks/ingestion" / notebook).read_text(),
+        )
+    )
+    parameters = ingestion["notebook_task"]["base_parameters"]
+    if set(parameters) != widgets:
+        raise SystemExit("Job parameters differ from notebook widgets: " + notebook)
+    for value in parameters.values():
+        for variable in re.findall(r"\$\{var\.(\w+)\}", value):
+            if variable not in bundle["variables"]:
+                raise SystemExit(
+                    "Job parameter uses an undefined variable: " + variable
+                )
 
 # route_delay_summary reads the fact and dimension, so it deploys after dbt build.
 dbt_commands = [
