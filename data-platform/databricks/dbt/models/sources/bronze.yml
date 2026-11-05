@@ -5,6 +5,56 @@ sources:
     database: "{{ var('bronze_catalog') }}"
     schema: "{{ var('bronze_schema') }}"
     tables:
+      # Written only by the Auto Loader job (KAN-35). Enabled once the slice Job reads
+      # through it (KAN-37); until then their source tests would fail `dbt build`.
+      - name: service_alerts
+        config:
+          enabled: "{{ var('autoloader_bronze') | as_bool }}"
+        description: >-
+          One source entity per immutable Service Alerts payload, in source order.
+          Non-alert entities have NULL informed_entity and active_period; present
+          alerts keep empty lists. Optional values remain NULL, including absent enum
+          fields. Missing period bounds mean an unbounded start or end. Text selects
+          en, otherwise a sole translation, otherwise NULL. Images remain in
+          raw_entity_json.
+        data_tests:
+          - unique_key:
+              arguments:
+                columns: [payload_sha256, entity_index]
+        columns:
+          - name: payload_sha256
+            data_tests: [not_null]
+          - name: entity_index
+            data_tests: [not_null]
+          - name: has_alert
+            data_tests: [not_null]
+          - name: informed_entity
+            description: Ordered selectors with nullable fields and a nullable nested TripDescriptor.
+          - name: active_period
+            description: Ordered UTC periods; NULL start/end represents an unbounded interval.
+          - name: raw_entity_json
+            data_tests: [not_null]
+          - name: record_sha256
+            data_tests: [not_null]
+      - name: quarantine
+        config:
+          enabled: "{{ var('autoloader_bronze') | as_bool }}"
+        description: >-
+          Append-only events for audit files that broke the source contract: one
+          'quarantined' event per distinct failed check, and a 'resolved' event once a
+          replay converts the file. Unresolved files are not in capture_attempts.
+        data_tests:
+          - unique_key:
+              arguments:
+                columns: [audit_ref, audit_sha256, event, failed_check]
+        columns:
+          - name: audit_ref
+            data_tests: [not_null]
+          - name: event
+            data_tests:
+              - accepted_values:
+                  arguments:
+                    values: [quarantined, resolved]
       - name: capture_attempts
         description: One row per audit attempt; repeated content hashes remain distinct observations.
         columns:

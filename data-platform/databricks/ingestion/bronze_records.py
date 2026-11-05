@@ -7,9 +7,11 @@ import json
 import math
 import re
 import zipfile
+import zlib
 from datetime import UTC, datetime
 
 from google.protobuf.json_format import MessageToDict
+from google.protobuf.message import DecodeError
 from google.transit import gtfs_realtime_pb2
 
 PARSER_VERSION = "1"
@@ -25,7 +27,12 @@ def require(condition, message):
 
 
 def utc(value):
-    parsed = datetime.fromisoformat(value)
+    # A missing or malformed source timestamp is a contract failure of that file,
+    # never an unclassified error that would stop the whole batch.
+    try:
+        parsed = datetime.fromisoformat(value)
+    except (TypeError, ValueError):
+        raise BronzeContractError("UTC timestamp required") from None
     require(
         parsed.tzinfo is not None and parsed.utcoffset().total_seconds() == 0,
         "UTC timestamp required",
@@ -60,6 +67,84 @@ def fingerprint(record):
     )
 
 
+AUDIT_PATH = r"audit/(capture_attempts|schedule_capture_attempts)/([0-9a-f]{32})\.json"
+REALTIME_FEEDS = ("vehicle_positions", "trip_updates", "service_alerts")
+
+
+def _reject_constant(_):
+    raise BronzeContractError("Unreadable audit")
+
+
+def parsed_audit(payload):
+    """An audit object; NaN and Infinity are not JSON, so they make it unreadable."""
+    try:
+        audit = json.loads(payload, parse_constant=_reject_constant)
+    except (UnicodeDecodeError, ValueError) as error:
+        if isinstance(error, BronzeContractError):
+            raise
+        raise BronzeContractError("Unreadable audit") from None
+    require(isinstance(audit, dict), "Unreadable audit")
+    return audit
+
+
+def _optional(audit, name, kinds, message):
+    value = audit.get(name)
+    # bool is an int subclass; a JSON true is never a count or status.
+    require(
+        value is None or (isinstance(value, kinds) and not isinstance(value, bool)),
+        message,
+    )
+    return value
+
+
+def _audit_row(ref, payload, audit, started, completed):
+    """The capture_attempts row; for a successful audit it is unchanged since v1."""
+    age = _optional(audit, "feed_age_seconds", (int, float), "Invalid audit field")
+    for name in ("entity_count", "vehicle_count", "payload_bytes"):
+        _optional(audit, name, int, "Invalid audit field")
+    for name in (
+        "poll_cycle_id",
+        "payload_ref",
+        "payload_sha256",
+        "incrementality",
+        "feed_version",
+    ):
+        _optional(audit, name, str, "Invalid audit field")
+    return {
+        "attempt_id": audit["attempt_id"],
+        "poll_cycle_id": audit.get("poll_cycle_id"),
+        "feed_type": audit["feed_type"],
+        "outcome": audit["outcome"],
+        "http_status": audit.get("http_status"),
+        "payload_ref": audit.get("payload_ref"),
+        "payload_sha256": audit.get("payload_sha256"),
+        "payload_bytes": audit.get("payload_bytes"),
+        "started_at_utc": started,
+        "completed_at_utc": completed,
+        "feed_timestamp": utc(audit["feed_timestamp"])
+        if audit.get("feed_timestamp")
+        else None,
+        "feed_age_seconds": float(age) if age is not None else None,
+        "incrementality": audit.get("incrementality"),
+        "entity_count": audit.get("entity_count"),
+        "vehicle_count": audit.get("vehicle_count"),
+        "feed_version": audit.get("feed_version"),
+        "audit_ref": ref,
+        "audit_sha256": digest(payload),
+        "raw_audit_json": canonical(audit),
+        "parser_version": PARSER_VERSION,
+    }
+
+
+def _audit_times(audit):
+    started, completed = (
+        utc(audit.get("started_at_utc")),
+        utc(audit.get("completed_at_utc")),
+    )
+    require(completed >= started, "Audit time order is invalid")
+    return started, completed
+
+
 def audit_record(ref, payload, feed_type):
     prefix = (
         "schedule_capture_attempts"
@@ -70,7 +155,7 @@ def audit_record(ref, payload, feed_type):
         re.fullmatch(r"audit/" + prefix + r"/[0-9a-f]{32}\.json", ref),
         "Invalid audit path",
     )
-    audit = json.loads(payload)
+    audit = parsed_audit(payload)
     require(
         audit.get("attempt_id") == ref.rsplit("/", 1)[1][:-5], "Audit identity mismatch"
     )
@@ -85,35 +170,41 @@ def audit_record(ref, payload, feed_type):
     require(
         audit.get("error_category") is None, "Successful audit has an error category"
     )
-    started, completed = utc(audit["started_at_utc"]), utc(audit["completed_at_utc"])
-    require(completed >= started, "Audit time order is invalid")
-    row = {
-        "attempt_id": audit["attempt_id"],
-        "poll_cycle_id": audit.get("poll_cycle_id"),
-        "feed_type": feed_type,
-        "outcome": audit["outcome"],
-        "http_status": audit["http_status"],
-        "payload_ref": audit["payload_ref"],
-        "payload_sha256": audit["payload_sha256"],
-        "payload_bytes": audit["payload_bytes"],
-        "started_at_utc": started,
-        "completed_at_utc": completed,
-        "feed_timestamp": utc(audit["feed_timestamp"])
-        if audit.get("feed_timestamp")
-        else None,
-        "feed_age_seconds": float(audit["feed_age_seconds"])
-        if audit.get("feed_age_seconds") is not None
-        else None,
-        "incrementality": audit.get("incrementality"),
-        "entity_count": audit.get("entity_count"),
-        "vehicle_count": audit.get("vehicle_count"),
-        "feed_version": audit.get("feed_version"),
-        "audit_ref": ref,
-        "audit_sha256": digest(payload),
-        "raw_audit_json": canonical(audit),
-        "parser_version": PARSER_VERSION,
-    }
-    return audit, row
+    started, completed = _audit_times(audit)
+    return audit, _audit_row(ref, payload, audit, started, completed)
+
+
+def captured_audit(ref, payload):
+    """Any audit under a capture prefix, successful or failed, and its row.
+
+    A successful audit passes every audit_record check. A failed one is the
+    collector's honest record of a failure: it must say which feed it was for,
+    when it ran and why it failed, but carries no payload promise.
+    """
+    match = re.fullmatch(AUDIT_PATH, ref)
+    require(match, "Invalid audit path")
+    audit = parsed_audit(payload)
+    feeds = (
+        ("gtfs_schedule",)
+        if match[1] == "schedule_capture_attempts"
+        else REALTIME_FEEDS
+    )
+    require(audit.get("feed_type") in feeds, "Unexpected feed type for audit path")
+    if audit.get("outcome") == "success":
+        return audit_record(ref, payload, audit["feed_type"])
+    require(audit.get("attempt_id") == match[2], "Audit identity mismatch")
+    require(
+        isinstance(audit.get("outcome"), str) and audit["outcome"],
+        "Audit outcome missing",
+    )
+    require(
+        isinstance(audit.get("error_category"), str) and audit["error_category"],
+        "Failed audit has no error category",
+    )
+    status = _optional(audit, "http_status", int, "Invalid audit field")
+    require(status is None or 100 <= status <= 599, "Invalid audit field")
+    started, completed = _audit_times(audit)
+    return audit, _audit_row(ref, payload, audit, started, completed)
 
 
 def verify_payload(audit, payload, feed_type, extension):
@@ -134,7 +225,10 @@ def verify_payload(audit, payload, feed_type, extension):
 def verified_feed(audit, payload, feed_type, required_counts=()):
     sha = verify_payload(audit, payload, feed_type, "pb")
     feed = gtfs_realtime_pb2.FeedMessage()
-    feed.ParseFromString(payload)
+    try:
+        feed.ParseFromString(payload)
+    except DecodeError:
+        raise BronzeContractError("Invalid GTFS-Realtime message") from None
     require(
         feed.IsInitialized() and feed.header.gtfs_realtime_version,
         "Invalid GTFS-Realtime message",
@@ -412,8 +506,27 @@ def trip_update_records(audit, payload):
     return rows
 
 
+# What a corrupt, encrypted or non-UTF-8 archive raises while being read.
+UNREADABLE_ZIP = (
+    zipfile.BadZipFile,
+    zlib.error,
+    EOFError,
+    NotImplementedError,
+    RuntimeError,
+    UnicodeDecodeError,
+    csv.Error,
+)
+
+
 def schedule_members(payload):
     """Header and rows of each Static member present: {"routes.txt": (fields, rows)}."""
+    try:
+        return _schedule_members(payload)
+    except UNREADABLE_ZIP:
+        raise BronzeContractError("Unreadable Static ZIP") from None
+
+
+def _schedule_members(payload):
     with zipfile.ZipFile(io.BytesIO(payload)) as archive:
         names = [member.filename for member in archive.infolist()]
         require(len(names) == len(set(names)), "Invalid ZIP member names")
@@ -426,7 +539,10 @@ def schedule_members(payload):
                 f"{name} exceeds the sample limit",
             )
             reader = csv.DictReader(io.StringIO(archive.read(name).decode("utf-8-sig")))
-            members[name] = (reader.fieldnames or [], list(reader))
+            rows = list(reader)
+            # A row longer than the header has a None key no Bronze row can hold.
+            require(all(None not in row for row in rows), f"{name} has malformed rows")
+            members[name] = (reader.fieldnames or [], rows)
     return members
 
 

@@ -15,6 +15,9 @@ vars:
   bronze_catalog: "{{ env_var('DBT_CATALOG', 'workspace') }}"
   bronze_schema: "{{ env_var('TRANSIT_BRONZE_SCHEMA', 'transit_dev_bronze') }}"
   reference_static_sha256: ac5f83a35d4c79063f44cb9962d8fbdeb283788d0ff87d86c4ccf13cee22d3bc
+  # Registers the Bronze tables only the Auto Loader job writes (service_alerts,
+  # quarantine). Turned on, then removed, at the cutover (KAN-37).
+  autoloader_bronze: false
   verify_sample: true
   sample_rt_attempt_id: 9a50c68781504c3cab4d71e37f61c655
   sample_static_attempt_id: 78fa7b44a0684241af71ba99ab827972
