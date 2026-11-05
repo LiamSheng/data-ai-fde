@@ -61,6 +61,3 @@ targets:
   dev:
     default: true
     mode: development
-    # Development mode pauses schedules; the showcase Job must run on its own.
-    presets:
-      trigger_pause_status: UNPAUSED

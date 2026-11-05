@@ -13,8 +13,9 @@ into `main`.
 | Job `transit-showcase-dev`, every 10 min: Auto Loader → `transit_showcase_bronze`, then `showcase_export.py` writes `v1/showcase.json` | `data-platform/databricks/resources/showcase.job.yml`, `databricks/showcase/` | Own schema and checkpoints; never touches `transit_dev_*` |
 | Web section, hidden until `showcase.json` loads | `web/src/components/ShowcasePanel.astro`, `web/src/lib/showcase-client.ts` | Missing or broken JSON leaves the page as on `main` |
 
-The bundle's `dev` target sets `presets.trigger_pause_status: UNPAUSED` so the schedule
-runs in development mode; `check_local.py` allows this one scheduled Job.
+Development mode deploys every schedule paused and refuses to unpause them by default,
+so resume the Job's schedule by hand after each `bundle deploy`. `check_local.py` allows
+this one scheduled Job.
 
 ## Deploy (Mac)
 
@@ -29,7 +30,9 @@ terraform init && terraform apply
 cd ../../databricks
 export DATABRICKS_CONFIG_PROFILE=transit-dev
 databricks bundle deploy
-databricks bundle run transit_showcase      # optional: don't wait for the schedule
+databricks bundle run transit_showcase      # one run now; check it passes
+# Then Jobs UI → transit-showcase-dev → Schedules & Triggers → Resume.
+# Every later `bundle deploy` pauses it again.
 
 # 3. Check the file, then publish the site
 curl -s https://storage.googleapis.com/transit-realtime-showcase-26/v1/showcase.json | head -c 400
