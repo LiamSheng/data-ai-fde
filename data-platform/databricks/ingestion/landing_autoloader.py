@@ -16,9 +16,7 @@ from datetime import UTC, datetime
 
 import bronze_autoloader
 import bronze_lib
-import bronze_records
 from bronze_lib import SparkTables, identifier
-from pyspark import cloudpickle
 
 dbutils.widgets.text("catalog", "workspace")
 dbutils.widgets.text("bronze_schema", "transit_dev_bronze")
@@ -48,14 +46,9 @@ if modified_after and not re.fullmatch(
     raise ValueError("modified_after must be blank or YYYY-MM-DDTHH:MM:SS (UTC)")
 
 namespace = f"{catalog}.{schema}"
-checkpoint_root = f"/Volumes/{catalog}/{schema}/checkpoints/landing_autoloader/v1/"
+checkpoint_root = f"/Volumes/{catalog}/{schema}/checkpoints/landing_autoloader/v2/"
 
 # COMMAND ----------
-
-# The batch function runs where notebook-local modules may not be importable;
-# ship them by value with it.
-for module in (bronze_autoloader, bronze_lib, bronze_records):
-    cloudpickle.register_pickle_by_value(module)
 
 spark.conf.set("spark.sql.session.timeZone", "UTC")
 spark.sql(f"CREATE SCHEMA IF NOT EXISTS {namespace}")
@@ -63,7 +56,7 @@ spark.sql(f"CREATE VOLUME IF NOT EXISTS {namespace}.checkpoints")
 
 try:
     if mode == "stream":
-        bronze_autoloader.run_autoloader(
+        converted = bronze_autoloader.run_autoloader(
             spark,
             namespace,
             landing_root,
@@ -71,7 +64,7 @@ try:
             int(max_files),
             modified_after,
         )
-        result = {"mode": mode}
+        result = {"mode": mode, "converted_audits": converted}
     else:
         result = {
             "mode": mode,
