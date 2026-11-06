@@ -306,6 +306,7 @@ def run_autoloader(
     the next run continues, and rows already written merge as no-ops.
     """
     from bronze_lib import SparkTables
+    from pyspark.sql import functions as F
 
     inbox = f"{namespace}.audit_inbox"
     discover(spark, inbox, landing_root, checkpoint_root, max_files, modified_after)
@@ -333,7 +334,9 @@ def run_autoloader(
         chunk = [paths[ref] for ref in pending[offset : offset + max_files]]
         rows = (
             spark.table(inbox)
-            .where(spark.table(inbox)["path"].isin(chunk))
+            # A column of the same DataFrame: Spark Connect rejects one taken from a
+            # second spark.table() call.
+            .where(F.col("path").isin(chunk))
             .select("path", "content")
             .collect()
         )
