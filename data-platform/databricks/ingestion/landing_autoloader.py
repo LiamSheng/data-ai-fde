@@ -79,9 +79,9 @@ except Exception as exc:  # noqa: BLE001
     # Python traceback of a failed foreachBatch.
     detail = re.sub(r"(?i)(token|secret|password|key)=\S+", r"\1=***", str(exc))
     print(json.dumps({"status": "FAIL", "exception_type": type(exc).__name__}))
-    print(detail[-6000:])
+    print(detail[:8000])
     raise RuntimeError(
-        f"Bronze ingestion failed: {type(exc).__name__}: {detail[-1500:]}"
+        f"Bronze ingestion failed: {type(exc).__name__}: {detail[:1500]}"
     ) from None
 
 # COMMAND ----------
