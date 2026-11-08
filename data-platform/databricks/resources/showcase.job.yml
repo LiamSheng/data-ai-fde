@@ -5,12 +5,13 @@ resources:
     transit_showcase:
       name: transit-showcase-${bundle.target}
       description: >-
-        Every 10 minutes: Auto Loader lands new Landing audits into a separate showcase
+        Hourly at :05: Auto Loader lands new Landing audits into a separate showcase
         Bronze schema, then a summary JSON for ai.linzi.info is overwritten from it.
       max_concurrent_runs: 1
       timeout_seconds: 3000
       schedule:
-        quartz_cron_expression: "0 0/10 * * * ?"
+        # :05 picks up the collector run that starts on the hour.
+        quartz_cron_expression: "0 5 * * * ?"
         timezone_id: America/Vancouver
         pause_status: UNPAUSED
       environments:

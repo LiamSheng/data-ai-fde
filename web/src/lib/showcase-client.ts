@@ -1,12 +1,13 @@
 /**
  * Branch `showcase`: fills the "Live from the lakehouse" section from showcase.json, which a Databricks job
- * overwrites from the Bronze layer every 10 minutes. Until a valid file arrives the section stays hidden,
+ * overwrites from the Bronze layer every hour. Until a valid file arrives the section stays hidden,
  * so a missing or broken file leaves the page exactly as it was.
  * Every value from the file goes in through textContent, never as HTML.
  */
 export const SHOWCASE_URL = 'https://storage.googleapis.com/transit-realtime-showcase-26/v1/showcase.json';
 const REFRESH_MS = 5 * 60_000;
-const STALE_MS = 60 * 60_000;
+// Hourly runs: a file older than two runs means the job has stopped.
+const STALE_MS = 2.5 * 60 * 60_000;
 
 interface RouteCount { route: string; vehicles: number }
 interface RouteDelay { route: string; trips: number; avg_delay_seconds: number; late_share: number }

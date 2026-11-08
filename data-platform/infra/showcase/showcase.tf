@@ -1,5 +1,5 @@
 # The page's "live from the lakehouse" panel reads one public object, v1/showcase.json,
-# which a scheduled Databricks job overwrites from Bronze every 10 minutes.
+# which a scheduled Databricks job overwrites from Bronze every hour.
 # Rollback: `terraform destroy` here. The bucket and its object go with it.
 
 resource "google_storage_bucket" "showcase" {

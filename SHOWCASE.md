@@ -1,7 +1,7 @@
 # Showcase branch
 
 Temporary. Adds a "Live from the lakehouse" section under the Map page workspace on
-ai.linzi.info, refreshed every 10 minutes from Databricks Bronze. It is built on the
+ai.linzi.info, refreshed every hour from Databricks Bronze. It is built on the
 unaccepted KAN-35 Auto Loader code and skips acceptance on purpose; it never merges
 into `main`.
 
@@ -10,7 +10,7 @@ into `main`.
 | Piece | Where | Isolated how |
 |---|---|---|
 | Public bucket `transit-realtime-showcase-26` + a Databricks write credential and external location | `data-platform/infra/showcase/` | Own Terraform state; `terraform destroy` removes all of it |
-| Job `transit-showcase-dev`, every 10 min: Auto Loader → `transit_showcase_bronze`, then `showcase_export.py` writes `v1/showcase.json` | `data-platform/databricks/resources/showcase.job.yml`, `databricks/showcase/` | Own schema and checkpoints; never touches `transit_dev_*` |
+| Job `transit-showcase-dev`, hourly at :05: Auto Loader → `transit_showcase_bronze`, then `showcase_export.py` writes `v1/showcase.json` | `data-platform/databricks/resources/showcase.job.yml`, `databricks/showcase/` | Own schema and checkpoints; never touches `transit_dev_*` |
 | Web section, hidden until `showcase.json` loads | `web/src/components/ShowcasePanel.astro`, `web/src/lib/showcase-client.ts` | Missing or broken JSON leaves the page as on `main` |
 
 Development mode deploys every schedule paused and refuses to unpause them by default,
@@ -57,4 +57,4 @@ Each step stands alone; doing only the first two already hides the section and s
   handling, `dbutils.fs.put` to the external location and nested schema equality are
   all first exercised by the first scheduled run. If a run fails, the section shows the
   last good file, or stays hidden.
-- 144 serverless runs a day; whether the free-trial credit covers DBUs is unverified.
+- 24 serverless runs a day; whether the free-trial credit covers DBUs is unverified.
