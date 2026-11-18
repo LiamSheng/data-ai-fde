@@ -438,5 +438,14 @@ class AlertCount(unittest.TestCase):
         )
 
 
+class PendingAudits(unittest.TestCase):
+    def test_converted_and_quarantined_audits_are_not_pending(self):
+        from bronze_autoloader import pending_audits
+
+        self.assertEqual(
+            pending_audits(["a", "b", "c", "d"], ["b", "d", "z"]), ["a", "c"]
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

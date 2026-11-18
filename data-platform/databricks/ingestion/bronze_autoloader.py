@@ -1,11 +1,12 @@
-"""Audit-driven Bronze ingestion: Auto Loader discovers audits, each batch lands here.
+"""Audit-driven Bronze ingestion: Auto Loader discovers audits into an inbox table,
+then every pending audit is converted here in bounded chunks.
 
 The collector writes a payload before its audit, so an audit Auto Loader finds
 always refers to a payload already in Landing. Every audit becomes a
 capture_attempts row, failed captures included; only successful ones have their
 payload read and converted. A file that breaks the source contract is
-quarantined and the batch goes on; any other error fails the batch, which Auto
-Loader then replays whole, safely, because every write is an idempotent merge.
+quarantined and the chunk goes on; any other error fails the run, and its audits
+stay pending for the next one, safely, because every write is an idempotent merge.
 """
 
 import re
@@ -257,25 +258,23 @@ def _path_not_found(error):
     return condition() == "PATH_NOT_FOUND" or "Path does not exist" in str(error)
 
 
-def run_autoloader(spark, namespace, landing_root, checkpoint_root, max_files):
-    """Drain both audit prefixes with availableNow, one checkpoint per prefix.
+def pending_audits(inbox_refs, done_refs):
+    """Discovered audits not yet in capture_attempts or quarantine, oldest first.
 
-    Each batch builds its own adapters from the batch's session: on serverless the
-    function runs away from the notebook, so it may not share notebook state.
+    Every converted audit ends in exactly one of the two, so this is the work left
+    after a crash as well as after new discoveries.
     """
-    from bronze_lib import SparkTables
+    done = set(done_refs)
+    return [ref for ref in inbox_refs if ref not in done]
 
-    def batch(frame, _batch_id):
-        session = frame.sparkSession
-        session.conf.set("spark.sql.session.timeZone", "UTC")
-        landing = SparkAuditLanding(session, landing_root)
-        files = [
-            (landing.relative(row["path"]), bytes(row["content"]))
-            for row in frame.select("path", "content").collect()
-        ]
-        if files:
-            ingest_audits(landing, SparkTables(session, namespace), files)
 
+def discover(spark, inbox, landing_root, checkpoint_root, max_files):
+    """Append newly arrived audit files (path and bytes) to the inbox Delta table.
+
+    A plain Delta sink, not foreachBatch: on serverless (Spark Connect) a Python
+    batch function must be pickled, and the protobuf descriptors the converters
+    use cannot be. The sink gives exactly-once discovery; conversion runs after.
+    """
     for prefix in AUDIT_PREFIXES:
         query = (
             spark.readStream.format("cloudFiles")
@@ -284,10 +283,58 @@ def run_autoloader(spark, namespace, landing_root, checkpoint_root, max_files):
             .option("cloudFiles.maxFilesPerTrigger", str(max_files))
             .option("pathGlobFilter", "*.json")
             .load(landing_root + prefix)
-            .writeStream.foreachBatch(batch)
-            .option("checkpointLocation", checkpoint_root + prefix.strip("/") + "/")
+            .select("path", "modificationTime", "length", "content")
+            .writeStream.option(
+                "checkpointLocation", checkpoint_root + prefix.strip("/") + "/"
+            )
             .trigger(availableNow=True)
-            .start()
+            .toTable(inbox)
         )
-        # Raises when a batch fails; its checkpoint then stays where it was.
         query.awaitTermination()
+
+
+def run_autoloader(spark, namespace, landing_root, checkpoint_root, max_files):
+    """Discover with Auto Loader, then convert every pending audit in bounded chunks.
+
+    Returns how many audits were converted. A failure leaves the rest pending;
+    the next run continues, and rows already written merge as no-ops.
+    """
+    from bronze_lib import SparkTables
+    from pyspark.sql import functions as F
+
+    inbox = f"{namespace}.audit_inbox"
+    discover(spark, inbox, landing_root, checkpoint_root, max_files)
+    landing = SparkAuditLanding(spark, landing_root)
+    tables = SparkTables(spark, namespace)
+    done = []
+    for table in ("capture_attempts", "quarantine"):
+        if spark.catalog.tableExists(f"{namespace}.{table}"):
+            done += [
+                row[0]
+                for row in spark.table(f"{namespace}.{table}")
+                .select("audit_ref")
+                .distinct()
+                .collect()
+            ]
+    paths = {
+        landing.relative(row["path"]): row["path"]
+        for row in spark.table(inbox)
+        .select("path", "modificationTime")
+        .orderBy("modificationTime", "path")
+        .collect()
+    }
+    pending = pending_audits(list(paths), done)
+    for offset in range(0, len(pending), max_files):
+        chunk = [paths[ref] for ref in pending[offset : offset + max_files]]
+        rows = (
+            spark.table(inbox)
+            # A column of the same DataFrame: Spark Connect rejects one taken from a
+            # second spark.table() call.
+            .where(F.col("path").isin(chunk))
+            .select("path", "content")
+            .collect()
+        )
+        # The same file can be discovered twice (e.g. a reset checkpoint); keep one.
+        files = {landing.relative(r["path"]): bytes(r["content"]) for r in rows}
+        ingest_audits(landing, tables, sorted(files.items()))
+    return len(pending)

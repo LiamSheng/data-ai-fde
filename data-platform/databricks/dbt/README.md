@@ -55,18 +55,24 @@ under `/Volumes/<catalog>/<bronze_schema>/checkpoints/landing_autoloader/v1/`.
 - Every audit becomes a `capture_attempts` row, failed captures included
   (`is_success` in Silver tells them apart). Only successful audits have their
   payload read and converted.
+- Two stages, because serverless runs `foreachBatch` through Spark Connect and the
+  protobuf descriptors the converters use cannot be pickled. Auto Loader only
+  appends discovered audit files (path and bytes) to `audit_inbox`; the notebook
+  then converts every inbox audit whose `audit_ref` is in neither
+  `capture_attempts` nor `quarantine`, in chunks of `max_files_per_trigger`.
 - A file that breaks the source contract (`BronzeContractError`: mismatched hash,
   size or counts, unreadable audit, protobuf or ZIP, missing payload) gets a
-  `quarantined` event and the batch goes on. Any other error fails the batch; Auto
-  Loader replays it whole and the insert-only merges make the replay a no-op for
-  rows already written.
-- Each batch writes content tables, then `quarantine`, then `capture_attempts`, the
+  `quarantined` event and the chunk goes on. Any other error fails the run; its
+  audits stay pending, so the next run converts them again and the insert-only
+  merges make that a no-op for rows already written.
+- Each chunk writes content tables, then `quarantine`, then `capture_attempts`, the
   commit marker Silver joins on.
 - `mode=replay_quarantine` re-runs unresolved files through the same conversion (for
   a fixed parser or a late payload) and appends a `resolved` event after the
   file's `capture_attempts` row.
-- Reset: a new checkpoint directory (bump `v1`) rediscovers all of Landing; every
-  existing row then merges as a no-op.
+- Reset: a new checkpoint directory (bump `v2`) rediscovers all of Landing into
+  `audit_inbox`; already converted audits are not pending, and any row written
+  again merges as a no-op.
 - Accept in a scratch schema: copy a few audits and payloads to a Volume and run the
   Job with `bronze_schema=transit_<name>_bronze` and `landing_root=/Volumes/.../`.
 
