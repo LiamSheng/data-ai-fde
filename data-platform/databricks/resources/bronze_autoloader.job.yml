@@ -1,0 +1,31 @@
+resources:
+  jobs:
+    transit_bronze_autoloader:
+      name: transit-bronze-autoloader-${bundle.target}
+      description: >-
+        Manual Auto Loader ingestion of every Landing audit into Bronze (KAN-35).
+        Not scheduled; the slice Job keeps the bounded loader until the cutover.
+      max_concurrent_runs: 1
+      timeout_seconds: 7200
+      environments:
+        - environment_key: bronze
+          spec:
+            environment_version: "4"
+            dependencies:
+              - gtfs-realtime-bindings==3.0.0
+      tasks:
+        - task_key: landing_autoloader
+          environment_key: bronze
+          timeout_seconds: 7200
+          max_retries: 0
+          retry_on_timeout: false
+          disable_auto_optimization: true
+          notebook_task:
+            source: WORKSPACE
+            notebook_path: ../ingestion/landing_autoloader.py
+            base_parameters:
+              catalog: ${var.catalog}
+              bronze_schema: ${var.schema_prefix}_bronze
+              landing_root: ${var.landing_root}
+              max_files_per_trigger: ${var.max_files_per_trigger}
+              mode: stream

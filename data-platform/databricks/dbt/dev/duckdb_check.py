@@ -6,7 +6,7 @@ transpiles the compiled Databricks SQL to DuckDB with sqlglot, and runs it:
 
   unit      run the dbt unit tests (all, or --select NAME ...)
   function  run the route_delay_summary SQL function cases in dev/function_tests.yml
-  replay  load the local Static (data/audit) and Trip Updates (data/ops) audits
+  replay  load local Static (data/audit) and realtime (data/ops) audits
           with their payloads (data/raw) through the Bronze converters, build
           every model, run the data tests (honouring warn_if / error_if), and
           print a per-snapshot summary of fct_trip_delay_sample (or --sql QUERY)
@@ -435,6 +435,7 @@ def run_benchmark_calls(warehouse):
 def replay(sql):
     sys.path.insert(0, str(INGESTION))
     from bronze_records import (
+        alert_records,
         audit_record,
         calendar_records,
         fingerprint,
@@ -442,7 +443,7 @@ def replay(sql):
         trip_update_records,
     )
 
-    manifest = compile_manifest({"verify_sample": False})
+    manifest = compile_manifest({"verify_sample": False, "autoloader_bronze": True})
     warehouse = Warehouse(manifest)
 
     def load(name, records):
@@ -492,6 +493,13 @@ def replay(sql):
         lambda audit, payload: {"trip_updates": trip_update_records(audit, payload)},
     )
     print(f"Loaded {loaded} successful Trip Updates captures from data/.")
+    alerts = load_captures(
+        "ops/capture_attempts",
+        "raw/gtfs_rt",
+        "service_alerts",
+        lambda audit, payload: {"service_alerts": alert_records(audit, payload)},
+    )
+    print(f"Loaded {alerts} successful Service Alerts captures from data/.")
     failing = 0
     for test in warehouse.of_type("test"):
         if not test.get("compiled_code"):
