@@ -1,0 +1,27 @@
+{
+  "archive_files": [
+    "agency.txt",
+    "calendar.txt",
+    "calendar_dates.txt",
+    "routes.txt",
+    "stop_times.txt",
+    "stops.txt",
+    "trips.txt"
+  ],
+  "attempt_id": "4c1e9a7f2b8d4e6a9c3f5b7d1e0a2c4f",
+  "calendar_end_date": "20261205",
+  "calendar_start_date": "20261025",
+  "completed_at_utc": "2026-10-28T17:40:09.630441Z",
+  "feed_end_date": "20261205",
+  "feed_start_date": "20261025",
+  "feed_type": "gtfs_schedule",
+  "http_status": 200,
+  "outcome": "success",
+  "payload_bytes": 21734812,
+  "payload_ref": "gtfs_schedule/ac/ac5f83a35d4c79063f44cb9962d8fbdeb283788d0ff87d86c4ccf13cee22d3bc.zip",
+  "payload_sha256": "ac5f83a35d4c79063f44cb9962d8fbdeb283788d0ff87d86c4ccf13cee22d3bc",
+  "schema_version": 1,
+  "source_id": "primary",
+  "started_at_utc": "2026-10-28T17:40:02.114902Z",
+  "storage_disposition": "new"
+}

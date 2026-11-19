@@ -1,4 +1,7 @@
-"""The audit model for one attempt to capture a GTFS-Realtime feed."""
+"""The audit model for one attempt to capture a GTFS-Realtime feed.
+
+Contract: contracts/capture-audit/capture_attempt.v1.schema.json.
+"""
 
 import math
 from dataclasses import dataclass
@@ -6,6 +9,9 @@ from datetime import datetime, timedelta
 from enum import StrEnum
 from pathlib import PurePosixPath
 from string import hexdigits
+
+# Version of the audit document both collectors write (contracts/capture-audit/).
+AUDIT_SCHEMA_VERSION = 1
 
 
 class Outcome(StrEnum):
@@ -175,6 +181,7 @@ class CaptureAttempt:
     def to_record(self) -> dict[str, str | int | float]:
         """Emit only approved, JSON-ready fields."""
         record: dict[str, str | int | float | None] = {
+            "schema_version": AUDIT_SCHEMA_VERSION,
             "attempt_id": self.attempt_id,
             "poll_cycle_id": self.poll_cycle_id,
             "source_id": self.source_id,

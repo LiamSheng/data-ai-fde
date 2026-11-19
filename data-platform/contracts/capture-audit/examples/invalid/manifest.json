@@ -1,0 +1,74 @@
+[
+  {
+    "file": "failed_without_error_category.json",
+    "schema": "capture_attempt",
+    "audit_ref": "audit/capture_attempts/5b1f0c2a7d9e4e8f9a0b1c2d3e4f5a6b.json",
+    "schema_valid": false,
+    "bronze_check": "Failed audit has no error category",
+    "why": "A failure must say why it failed."
+  },
+  {
+    "file": "success_with_error_category.json",
+    "schema": "capture_attempt",
+    "audit_ref": "audit/capture_attempts/09d0252fe08e4096bcc352074df09085.json",
+    "schema_valid": false,
+    "bronze_check": "Successful audit has an error category",
+    "why": "A success cannot also carry a failure reason."
+  },
+  {
+    "file": "success_with_http_500.json",
+    "schema": "capture_attempt",
+    "audit_ref": "audit/capture_attempts/09d0252fe08e4096bcc352074df09085.json",
+    "schema_valid": false,
+    "bronze_check": "Expected HTTP success",
+    "why": "A success requires a 2xx response."
+  },
+  {
+    "file": "count_is_boolean.json",
+    "schema": "capture_attempt",
+    "audit_ref": "audit/capture_attempts/09d0252fe08e4096bcc352074df09085.json",
+    "schema_valid": false,
+    "bronze_check": "Invalid audit field",
+    "why": "JSON true is not a count, although Python's bool is an int."
+  },
+  {
+    "file": "unsupported_schema_version.json",
+    "schema": "capture_attempt",
+    "audit_ref": "audit/capture_attempts/5b1f0c2a7d9e4e8f9a0b1c2d3e4f5a6b.json",
+    "schema_valid": false,
+    "bronze_check": "Unsupported audit schema version",
+    "why": "A reader that does not know v2 must stop rather than guess."
+  },
+  {
+    "file": "schedule_feed_under_realtime_prefix.json",
+    "schema": "capture_attempt",
+    "audit_ref": "audit/capture_attempts/e1d2c3b4a5f64e7d8c9b0a1f2e3d4c5b.json",
+    "schema_valid": false,
+    "bronze_check": "Unexpected feed type for audit path",
+    "why": "The directory decides which feeds may appear in it."
+  },
+  {
+    "file": "completed_before_started.json",
+    "schema": "capture_attempt",
+    "audit_ref": "audit/capture_attempts/5b1f0c2a7d9e4e8f9a0b1c2d3e4f5a6b.json",
+    "schema_valid": true,
+    "bronze_check": "Audit time order is invalid",
+    "why": "JSON Schema cannot compare two fields; only Bronze catches this."
+  },
+  {
+    "file": "attempt_id_differs_from_file_name.json",
+    "schema": "capture_attempt",
+    "audit_ref": "audit/capture_attempts/ffffffffffffffffffffffffffffffff.json",
+    "schema_valid": true,
+    "bronze_check": "Audit identity mismatch",
+    "why": "The schema sees the document, not the object name it was stored under."
+  },
+  {
+    "file": "unknown_outcome.json",
+    "schema": "capture_attempt",
+    "audit_ref": "audit/capture_attempts/5b1f0c2a7d9e4e8f9a0b1c2d3e4f5a6b.json",
+    "schema_valid": false,
+    "bronze_check": null,
+    "why": "Bronze accepts any named failure as a tolerant reader; only the producer schema rejects it."
+  }
+]

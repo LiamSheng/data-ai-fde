@@ -1,0 +1,21 @@
+{
+  "alert_count": 0,
+  "attempt_id": "09d0252fe08e4096bcc352074df09085",
+  "completed_at_utc": "2026-11-05T20:00:12.247951Z",
+  "entity_count": 754,
+  "feed_age_seconds": 15.247951,
+  "feed_timestamp": "2026-11-05T19:59:57Z",
+  "feed_type": "trip_updates",
+  "http_status": 200,
+  "incrementality": "FULL_DATASET",
+  "outcome": "success",
+  "payload_bytes": 683343,
+  "payload_ref": "trip_updates/75/7552d42d911dfff5a8a183da0a12cf9c95bdfef396bb3e6815ecf4b6dd5952e7.pb",
+  "payload_sha256": "7552d42d911dfff5a8a183da0a12cf9c95bdfef396bb3e6815ecf4b6dd5952e7",
+  "poll_cycle_id": "360c9ee9a47748bfbe7f3b87ee369a12",
+  "schema_version": 1,
+  "source_id": "primary",
+  "started_at_utc": "2026-11-05T20:00:11.985210Z",
+  "trip_update_count": 754,
+  "vehicle_count": true
+}
