@@ -55,3 +55,8 @@ targets:
   dev:
     default: true
     mode: development
+  # Deploy main here (-t main) while the showcase branch owns the dev deployment:
+  # each target has its own root path and state, so deploying main to dev would
+  # delete the showcase Job, which main does not define.
+  main:
+    mode: development
