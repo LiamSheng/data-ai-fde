@@ -1,0 +1,11 @@
+{
+  "attempt_id": "5b1f0c2a7d9e4e8f9a0b1c2d3e4f5a6b",
+  "completed_at_utc": "2026-11-05T20:00:12.118207Z",
+  "feed_type": "vehicle_positions",
+  "http_status": 500,
+  "outcome": "http_error",
+  "poll_cycle_id": "360c9ee9a47748bfbe7f3b87ee369a12",
+  "schema_version": 1,
+  "source_id": "primary",
+  "started_at_utc": "2026-11-05T20:00:11.901334Z"
+}

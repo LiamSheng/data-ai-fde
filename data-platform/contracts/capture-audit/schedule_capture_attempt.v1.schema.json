@@ -1,0 +1,89 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ai.linzi.info/contracts/capture-audit/schedule_capture_attempt.v1.schema.json",
+  "title": "Static schedule capture attempt audit, v1",
+  "description": "One download of the static GTFS schedule ZIP, written by the schedule collector to audit/schedule_capture_attempts/<attempt_id>.json after its archive. Empty fields are omitted, never null.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "attempt_id",
+    "source_id",
+    "feed_type",
+    "started_at_utc",
+    "completed_at_utc",
+    "outcome"
+  ],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "attempt_id": { "type": "string", "pattern": "^[0-9a-f]{32}$" },
+    "source_id": { "const": "primary" },
+    "feed_type": { "const": "gtfs_schedule" },
+    "started_at_utc": { "$ref": "#/$defs/utc" },
+    "completed_at_utc": { "$ref": "#/$defs/utc" },
+    "outcome": {
+      "enum": [
+        "success",
+        "config_error",
+        "http_error",
+        "timeout",
+        "transport_error",
+        "invalid_archive",
+        "storage_error",
+        "other_error"
+      ]
+    },
+    "http_status": { "type": "integer", "minimum": 100, "maximum": 599 },
+    "error_category": {
+      "enum": [
+        "configuration",
+        "authentication",
+        "http_client",
+        "http_server",
+        "timeout",
+        "transport",
+        "invalid_archive",
+        "storage",
+        "other"
+      ]
+    },
+    "payload_ref": {
+      "type": "string",
+      "pattern": "^gtfs_schedule/[0-9a-f]{2}/[0-9a-f]{64}\\.zip$"
+    },
+    "payload_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "payload_bytes": { "type": "integer", "minimum": 0 },
+    "storage_disposition": { "enum": ["new", "existing"] },
+    "archive_files": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "feed_version": { "type": "string" },
+    "feed_start_date": { "$ref": "#/$defs/gtfs_date" },
+    "feed_end_date": { "$ref": "#/$defs/gtfs_date" },
+    "calendar_start_date": { "$ref": "#/$defs/gtfs_date" },
+    "calendar_end_date": { "$ref": "#/$defs/gtfs_date" },
+    "calendar_exception_add_start_date": { "$ref": "#/$defs/gtfs_date" },
+    "calendar_exception_add_end_date": { "$ref": "#/$defs/gtfs_date" }
+  },
+  "allOf": [
+    {
+      "$comment": "A success saved the archive it downloaded.",
+      "if": { "properties": { "outcome": { "const": "success" } } },
+      "then": {
+        "required": ["http_status", "payload_ref", "payload_sha256", "payload_bytes"],
+        "properties": { "http_status": { "minimum": 200, "maximum": 299 } },
+        "not": { "required": ["error_category"] }
+      },
+      "else": { "required": ["error_category"] }
+    }
+  ],
+  "$defs": {
+    "utc": { "type": "string", "format": "date-time", "pattern": "Z$" },
+    "gtfs_date": {
+      "$comment": "GTFS dates are YYYYMMDD service days, copied from the archive.",
+      "type": "string"
+    }
+  }
+}

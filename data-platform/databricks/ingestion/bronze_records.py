@@ -69,6 +69,9 @@ def fingerprint(record):
 
 AUDIT_PATH = r"audit/(capture_attempts|schedule_capture_attempts)/([0-9a-f]{32})\.json"
 REALTIME_FEEDS = ("vehicle_positions", "trip_updates", "service_alerts")
+# Audit versions this reader understands (contracts/capture-audit/). Audits written
+# before the field existed omit it and have the v1 shape.
+AUDIT_SCHEMA_VERSIONS = (1,)
 
 
 def _reject_constant(_):
@@ -84,6 +87,11 @@ def parsed_audit(payload):
             raise
         raise BronzeContractError("Unreadable audit") from None
     require(isinstance(audit, dict), "Unreadable audit")
+    version = audit.get("schema_version")
+    require(
+        version is None or (type(version) is int and version in AUDIT_SCHEMA_VERSIONS),
+        "Unsupported audit schema version",
+    )
     return audit
 
 

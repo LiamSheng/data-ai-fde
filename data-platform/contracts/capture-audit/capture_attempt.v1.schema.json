@@ -1,0 +1,112 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ai.linzi.info/contracts/capture-audit/capture_attempt.v1.schema.json",
+  "title": "Realtime capture attempt audit, v1",
+  "description": "One attempt to capture a GTFS-Realtime feed, written by the collector to audit/capture_attempts/<attempt_id>.json after its payload. Empty fields are omitted, never null.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "attempt_id",
+    "source_id",
+    "feed_type",
+    "started_at_utc",
+    "completed_at_utc",
+    "outcome"
+  ],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "attempt_id": { "$ref": "#/$defs/hex32" },
+    "poll_cycle_id": { "$ref": "#/$defs/hex32" },
+    "source_id": { "type": "string", "minLength": 1 },
+    "feed_type": {
+      "enum": ["vehicle_positions", "trip_updates", "service_alerts"]
+    },
+    "started_at_utc": { "$ref": "#/$defs/utc" },
+    "completed_at_utc": { "$ref": "#/$defs/utc" },
+    "outcome": {
+      "enum": [
+        "success",
+        "config_error",
+        "http_error",
+        "timeout",
+        "invalid_protobuf",
+        "feed_metadata_error",
+        "feed_content_error",
+        "transport_error",
+        "storage_error",
+        "other_error"
+      ]
+    },
+    "http_status": { "type": "integer", "minimum": 100, "maximum": 599 },
+    "payload_ref": {
+      "type": "string",
+      "pattern": "^(vehicle_positions|trip_updates|service_alerts)/[0-9a-f]{2}/[0-9a-f]{64}\\.pb$"
+    },
+    "payload_sha256": { "$ref": "#/$defs/sha256" },
+    "payload_bytes": { "type": "integer", "minimum": 0 },
+    "feed_timestamp": { "$ref": "#/$defs/utc" },
+    "feed_age_seconds": { "type": "number" },
+    "incrementality": { "enum": ["FULL_DATASET", "DIFFERENTIAL"] },
+    "entity_count": { "$ref": "#/$defs/count" },
+    "vehicle_count": { "$ref": "#/$defs/count" },
+    "trip_update_count": { "$ref": "#/$defs/count" },
+    "alert_count": { "$ref": "#/$defs/count" },
+    "error_category": {
+      "enum": [
+        "configuration",
+        "authentication",
+        "http_client",
+        "http_server",
+        "timeout",
+        "invalid_protobuf",
+        "feed_metadata",
+        "feed_content",
+        "transport",
+        "storage",
+        "other"
+      ]
+    }
+  },
+  "allOf": [
+    {
+      "$comment": "A success saved a payload and parsed the feed header.",
+      "if": { "properties": { "outcome": { "const": "success" } } },
+      "then": {
+        "required": [
+          "http_status",
+          "payload_ref",
+          "payload_sha256",
+          "payload_bytes",
+          "feed_timestamp",
+          "feed_age_seconds",
+          "incrementality",
+          "entity_count"
+        ],
+        "properties": { "http_status": { "minimum": 200, "maximum": 299 } },
+        "not": { "required": ["error_category"] }
+      },
+      "else": { "required": ["error_category"] }
+    },
+    {
+      "$comment": "http_error means the server answered with a non-2xx status.",
+      "if": { "properties": { "outcome": { "const": "http_error" } } },
+      "then": {
+        "required": ["http_status"],
+        "not": {
+          "properties": { "http_status": { "minimum": 200, "maximum": 299 } }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "hex32": { "type": "string", "pattern": "^[0-9a-f]{32}$" },
+    "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "count": { "type": "integer", "minimum": 0 },
+    "utc": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "Z$"
+    }
+  }
+}

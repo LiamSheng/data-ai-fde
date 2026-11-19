@@ -1,0 +1,11 @@
+{
+  "attempt_id": "e1d2c3b4a5f64e7d8c9b0a1f2e3d4c5b",
+  "completed_at_utc": "2026-11-02T17:40:02.011274Z",
+  "error_category": "http_server",
+  "feed_type": "gtfs_schedule",
+  "http_status": 503,
+  "outcome": "http_error",
+  "schema_version": 1,
+  "source_id": "primary",
+  "started_at_utc": "2026-11-02T17:40:01.300113Z"
+}

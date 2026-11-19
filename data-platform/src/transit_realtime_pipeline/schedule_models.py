@@ -1,8 +1,13 @@
-"""Audit contract for one static GTFS Schedule download attempt."""
+"""Audit contract for one static GTFS Schedule download attempt.
+
+Contract: contracts/capture-audit/schedule_capture_attempt.v1.schema.json.
+"""
 
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from enum import StrEnum
+
+from .models import AUDIT_SCHEMA_VERSION
 
 
 class ScheduleOutcome(StrEnum):
@@ -83,6 +88,7 @@ class ScheduleAttempt:
     def to_record(self) -> dict[str, object]:
         """Return JSON-ready allowlisted fields; never serialize request URLs."""
         record: dict[str, object | None] = {
+            "schema_version": AUDIT_SCHEMA_VERSION,
             "attempt_id": self.attempt_id,
             "source_id": "primary",
             "feed_type": "gtfs_schedule",

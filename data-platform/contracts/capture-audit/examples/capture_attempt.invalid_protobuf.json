@@ -1,0 +1,15 @@
+{
+  "attempt_id": "8a7b6c5d4e3f4a2b9c8d7e6f5a4b3c2d",
+  "completed_at_utc": "2026-11-06T08:10:03.844230Z",
+  "error_category": "invalid_protobuf",
+  "feed_type": "vehicle_positions",
+  "http_status": 200,
+  "outcome": "invalid_protobuf",
+  "payload_bytes": 1048,
+  "payload_ref": "vehicle_positions/3f/3f9d2c5e8a1b4c7d0e3f6a9b2c5d8e1f4a7b0c3d6e9f2a5b8c1d4e7f0a3b6c9d.pb",
+  "payload_sha256": "3f9d2c5e8a1b4c7d0e3f6a9b2c5d8e1f4a7b0c3d6e9f2a5b8c1d4e7f0a3b6c9d",
+  "poll_cycle_id": "7e2a9c41d3b84f0a9b6c5d4e3f2a1b0c",
+  "schema_version": 1,
+  "source_id": "primary",
+  "started_at_utc": "2026-11-06T08:10:03.002101Z"
+}

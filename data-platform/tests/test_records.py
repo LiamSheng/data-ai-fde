@@ -42,6 +42,7 @@ def test_success_record_has_only_approved_json_fields() -> None:
 
     # Exact equality also catches any unexpected field added to the output.
     assert record == {
+        "schema_version": 1,
         "attempt_id": "attempt-001",
         "source_id": "primary",
         "feed_type": "vehicle_positions",
@@ -75,6 +76,7 @@ def test_401_record_omits_unknown_payload_and_feed_fields() -> None:
     )
 
     assert attempt.to_record() == {
+        "schema_version": 1,
         "attempt_id": "attempt-002",
         "source_id": "primary",
         "feed_type": "vehicle_positions",
