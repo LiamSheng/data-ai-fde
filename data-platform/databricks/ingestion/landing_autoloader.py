@@ -3,7 +3,9 @@
 # MAGIC # Landing audits to Bronze with Auto Loader
 # MAGIC `mode=stream` drains every audit Auto Loader has not seen yet (availableNow), one
 # MAGIC checkpoint per audit prefix in the schema's `checkpoints` Volume. Contract
-# MAGIC failures go to `quarantine`; `mode=replay_quarantine` re-runs the unresolved ones.
+# MAGIC failures go to `quarantine`; `mode=replay_quarantine` re-runs the open ones, and
+# MAGIC `mode=waive_quarantine` closes the `audit_refs` named (space-separated) with a
+# MAGIC `waive_reason`. Runbook: ingestion/QUARANTINE.md.
 # MAGIC Point `landing_root` at a `/Volumes/.../` copy and `bronze_schema` at a scratch
 # MAGIC `transit_*_bronze` schema to accept changes without touching the shared tables.
 
@@ -16,6 +18,7 @@ from datetime import UTC, datetime
 
 import bronze_autoloader
 import bronze_lib
+import bronze_records
 from bronze_lib import SparkTables, identifier
 
 dbutils.widgets.text("catalog", "workspace")
@@ -23,6 +26,8 @@ dbutils.widgets.text("bronze_schema", "transit_dev_bronze")
 dbutils.widgets.text("landing_root", bronze_lib.BUCKET)
 dbutils.widgets.text("max_files_per_trigger", "50")
 dbutils.widgets.text("mode", "stream")
+dbutils.widgets.text("audit_refs", "")
+dbutils.widgets.text("waive_reason", "")
 
 catalog = identifier(dbutils.widgets.get("catalog"))
 schema = identifier(dbutils.widgets.get("bronze_schema"))
@@ -35,8 +40,14 @@ if not re.fullmatch(r"(gs://[a-z0-9._-]+/|/Volumes/[\w/-]+/)", landing_root):
     raise ValueError("landing_root must be a gs:// bucket or a /Volumes/ directory")
 if not re.fullmatch(r"[1-9][0-9]{0,3}", max_files):
     raise ValueError("max_files_per_trigger must be a positive integer")
-if mode not in {"stream", "replay_quarantine"}:
-    raise ValueError("mode must be stream or replay_quarantine")
+if mode not in {"stream", "replay_quarantine", "waive_quarantine"}:
+    raise ValueError("mode must be stream, replay_quarantine or waive_quarantine")
+# Space-separated: the CLI's --params already splits on commas.
+audit_refs = dbutils.widgets.get("audit_refs").split()
+if not all(re.fullmatch(bronze_records.AUDIT_PATH, ref) for ref in audit_refs):
+    raise ValueError("audit_refs must be audit/<prefix>/<attempt_id>.json paths")
+if mode != "waive_quarantine" and audit_refs:
+    raise ValueError("audit_refs is only used with mode=waive_quarantine")
 
 namespace = f"{catalog}.{schema}"
 checkpoint_root = f"/Volumes/{catalog}/{schema}/checkpoints/landing_autoloader/v2/"
@@ -53,7 +64,7 @@ try:
             spark, namespace, landing_root, checkpoint_root, int(max_files)
         )
         result = {"mode": mode, "converted_audits": converted}
-    else:
+    elif mode == "replay_quarantine":
         result = {
             "mode": mode,
             **bronze_autoloader.replay_quarantine(
@@ -61,6 +72,19 @@ try:
                 SparkTables(spark, namespace),
             ),
         }
+    else:
+        result = {
+            "mode": mode,
+            **bronze_autoloader.waive_quarantine(
+                SparkTables(spark, namespace),
+                audit_refs,
+                dbutils.widgets.get("waive_reason"),
+            ),
+        }
+except (bronze_autoloader.WaiverError, bronze_autoloader.BronzeContractError):
+    # Fixed messages without connector text: an operator's waiver mistake, or a
+    # contract failure outside one file (an immutable key collision on replay).
+    raise
 except Exception as exc:  # noqa: BLE001 - suppress connector text and credentials.
     print(json.dumps({"status": "FAIL", "exception_type": type(exc).__name__}))
     raise RuntimeError(
@@ -85,7 +109,7 @@ result.update(
         "checkpoint_root": checkpoint_root,
         "finished_at_utc": datetime.now(UTC).isoformat(),
         "capture_attempts": [row.asDict() for row in attempts],
-        "unresolved_quarantine": len(tables.unresolved_quarantine()),
+        "quarantine": bronze_autoloader.quarantine_summary(tables),
     }
 )
 print(json.dumps(result, indent=2))

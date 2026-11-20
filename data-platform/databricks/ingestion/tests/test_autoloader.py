@@ -14,8 +14,16 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import bronze_autoloader
-from bronze_autoloader import ingest_audits, replay_quarantine
+from bronze_autoloader import (
+    ingest_audits,
+    open_quarantine,
+    quarantine_state,
+    quarantine_summary,
+    replay_quarantine,
+    waive_quarantine,
+)
 from bronze_lib import load
+from bronze_records import BronzeContractError
 from test_load import Bucket, FakeLanding, FakeTables, at
 
 NOW = datetime(2026, 11, 5, 20, 0, tzinfo=UTC)
@@ -44,16 +52,8 @@ class RecordingTables(FakeTables):
         self.order.append(name)
         return super().merge(name, records)
 
-    def unresolved_quarantine(self):
-        events = self.rows["quarantine"].values()
-        resolved = {e["audit_ref"] for e in events if e["event"] == "resolved"}
-        return sorted(
-            {
-                e["audit_ref"]
-                for e in events
-                if e["event"] == "quarantined" and e["audit_ref"] not in resolved
-            }
-        )
+    def quarantine_events(self):
+        return list(self.rows["quarantine"].values())
 
 
 class AuditBucket(Bucket):
@@ -203,7 +203,9 @@ class FailedCaptures(BatchCase):
             (ref, "timeout", None, None),
         )
         self.assertEqual(result["failed_captures"], 1)
-        self.assertEqual(self.bucket.landing.reads, [[]])
+        self.assertEqual(
+            [ref for read in self.bucket.landing.reads for ref in read], []
+        )
         self.assertEqual(self.tables.count("quarantine"), 0)
 
     def test_failure_after_payload_is_recorded_but_not_converted(self):
@@ -383,7 +385,7 @@ class QuarantineReplay(BatchCase):
         self.assertEqual(
             self.tables.order, ["trip_updates", "capture_attempts", "quarantine"]
         )
-        self.assertEqual(self.tables.unresolved_quarantine(), [])
+        self.assertEqual(open_quarantine(self.tables), [])
         self.assertEqual(
             replay_quarantine(self.bucket.landing, self.tables, NOW)[
                 "unresolved_before"
@@ -396,7 +398,176 @@ class QuarantineReplay(BatchCase):
         result = replay_quarantine(self.bucket.landing, self.tables, NOW)
         self.assertEqual(result["resolved"], 0)
         self.assertEqual(self.tables.count("quarantine"), events)
-        self.assertEqual(self.tables.unresolved_quarantine(), [self.ref])
+        self.assertEqual(open_quarantine(self.tables), [self.ref])
+
+
+class QuarantineState(unittest.TestCase):
+    """The state of each file is derived from the append-only events alone."""
+
+    def event(self, ref, kind, minute, check=None):
+        return {
+            "audit_ref": ref,
+            "audit_sha256": f"sha-{ref}-{minute}",
+            "feed_type": "trip_updates",
+            "event": kind,
+            "failed_check": check,
+            "ingested_at_utc": NOW + timedelta(minutes=minute),
+        }
+
+    def test_open_until_resolved_or_waived(self):
+        states = quarantine_state(
+            [
+                self.event("a", "quarantined", 0, "Payload SHA-256 mismatch"),
+                self.event("b", "quarantined", 0, "Missing payload"),
+                self.event("b", "resolved", 5),
+                self.event("c", "quarantined", 0, "Unreadable audit"),
+                self.event("c", "waived", 9, "Truncated upload, re-capture impossible"),
+            ]
+        )
+        self.assertEqual(
+            {ref: state["status"] for ref, state in states.items()},
+            {"a": "open", "b": "resolved", "c": "waived"},
+        )
+        # The waiver's reason does not replace the failed check.
+        self.assertEqual(states["c"]["failed_check"], "Unreadable audit")
+
+    def test_latest_quarantined_event_describes_the_file(self):
+        states = quarantine_state(
+            [
+                self.event("a", "quarantined", 0, "Missing payload"),
+                self.event("a", "quarantined", 3, "Payload SHA-256 mismatch"),
+            ]
+        )
+        self.assertEqual(states["a"]["failed_check"], "Payload SHA-256 mismatch")
+        self.assertEqual(states["a"]["audit_sha256"], "sha-a-3")
+
+    def test_events_without_a_quarantine_are_ignored(self):
+        self.assertEqual(quarantine_state([self.event("a", "waived", 0, "x")]), {})
+
+
+class QuarantineWaiver(BatchCase):
+    def setUp(self):
+        super().setUp()
+        self.ref = self.bucket.trip_updates(at("2026-10-13T18:00:00"))
+        self.bucket.landing.objects.pop(self.bucket.payload_ref(self.ref))
+        self.ingest()
+
+    def test_waived_file_is_closed_and_not_replayed(self):
+        result = waive_quarantine(
+            self.tables, [self.ref], "Payload lost before soft-delete window", NOW
+        )
+        self.assertEqual(result["waived"], 1)
+        self.assertEqual(open_quarantine(self.tables), [])
+        self.assertEqual(
+            quarantine_summary(self.tables), {"open": 0, "resolved": 0, "waived": 1}
+        )
+        self.bucket.landing.reads.clear()
+        replay = replay_quarantine(self.bucket.landing, self.tables, NOW)
+        self.assertEqual(replay["unresolved_before"], 0)
+        self.assertEqual(
+            [ref for read in self.bucket.landing.reads for ref in read], []
+        )
+
+    def test_the_waived_event_keeps_the_audit_identity_and_reason(self):
+        waive_quarantine(self.tables, [self.ref], "  Truncated upload  ", NOW)
+        events = [e for e in self.tables.quarantine_events() if e["event"] == "waived"]
+        quarantined = next(
+            e for e in self.tables.quarantine_events() if e["event"] == "quarantined"
+        )
+        self.assertEqual(len(events), 1)
+        self.assertEqual(events[0]["failed_check"], "Truncated upload")
+        self.assertEqual(events[0]["audit_sha256"], quarantined["audit_sha256"])
+        self.assertEqual(events[0]["feed_type"], "trip_updates")
+
+    def test_waiving_twice_or_an_unknown_ref_is_refused(self):
+        waive_quarantine(self.tables, [self.ref], "Gone", NOW)
+        unknown = "audit/capture_attempts/" + "f" * 32 + ".json"
+        for refs in ([self.ref], [unknown]):
+            with (
+                self.subTest(refs=refs),
+                self.assertRaisesRegex(ValueError, "Not open"),
+            ):
+                waive_quarantine(self.tables, refs, "Gone", NOW)
+        self.assertEqual(
+            sum(e["event"] == "waived" for e in self.tables.quarantine_events()), 1
+        )
+
+    def test_a_reason_is_required(self):
+        for reason in ("", "   ", "two\nlines", "x" * 201, None):
+            with (
+                self.subTest(reason=reason),
+                self.assertRaisesRegex(ValueError, "reason"),
+            ):
+                waive_quarantine(self.tables, [self.ref], reason, NOW)
+        with self.assertRaisesRegex(ValueError, "at least one"):
+            waive_quarantine(self.tables, [], "Gone", NOW)
+
+    def test_waiving_does_not_make_the_audit_pending_again(self):
+        # run_autoloader counts every audit_ref in quarantine as done, whatever its
+        # latest event, so a waived file is not converted by the stream either.
+        waive_quarantine(self.tables, [self.ref], "Gone", NOW)
+        done = [event["audit_ref"] for event in self.tables.quarantine_events()]
+        self.assertEqual(bronze_autoloader.pending_audits([self.ref], done), [])
+
+
+class ReplayAfterParserChange(BatchCase):
+    """A parser that now writes different rows for a payload already in Bronze.
+
+    Payloads are content-addressed, so two audits can share one. If the first
+    converted under the old parser and the second was quarantined, replaying the
+    second under a changed parser meets the old rows: insert-only Bronze refuses,
+    and nothing about the second audit is written. Reprocessing is a separate,
+    deliberate migration (QUARANTINE.md), not something replay does.
+    """
+
+    def test_replay_stops_on_the_immutable_key_collision(self):
+        moment = at("2026-10-13T18:00:00")
+        first = self.bucket.trip_updates(moment)
+        self.ingest()
+        second = self.bucket.trip_updates(moment)  # identical payload, new attempt
+        self.assertEqual(
+            self.bucket.payload_ref(first), self.bucket.payload_ref(second)
+        )
+        self.tables.merge(
+            "quarantine",
+            bronze_autoloader.stamp(
+                [
+                    bronze_autoloader.quarantine_event(
+                        second,
+                        self.bucket.landing.objects[second][0],
+                        "trip_updates",
+                        "quarantined",
+                        "Missing payload",
+                    )
+                ],
+                NOW,
+            ),
+        )
+        convert = bronze_autoloader.FEEDS["trip_updates"][2]
+
+        def changed_parser(audit, payload):
+            tables = convert(audit, payload)
+            for row in tables["trip_updates"]:
+                row["route_id"] = "parser v2"
+            return tables
+
+        feeds = dict(
+            bronze_autoloader.FEEDS,
+            trip_updates=("pb", bronze_autoloader.REALTIME_LIMIT, changed_parser),
+        )
+        with (
+            mock.patch.object(bronze_autoloader, "FEEDS", feeds),
+            self.assertRaisesRegex(BronzeContractError, "Immutable key collision"),
+        ):
+            replay_quarantine(self.bucket.landing, self.tables, NOW)
+        self.assertNotIn(
+            second.split("/")[-1].removesuffix(".json"),
+            {
+                row["attempt_id"]
+                for row in self.tables.rows["capture_attempts"].values()
+            },
+        )
+        self.assertEqual(open_quarantine(self.tables), [second])
 
 
 class CutoverFromBoundedLoader(unittest.TestCase):
