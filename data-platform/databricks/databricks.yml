@@ -32,6 +32,9 @@ variables:
   max_files_per_trigger:
     description: Audits per Auto Loader micro-batch; bounds payload bytes held on the driver.
     default: "50"
+  max_capture_age_minutes:
+    description: Health check fails when a realtime feed's latest successful capture in Bronze is older.
+    default: "60"
   reference_static_sha256:
     description: Static version the Vehicle Positions slice joins; dim_routes uses the latest instead.
     default: ac5f83a35d4c79063f44cb9962d8fbdeb283788d0ff87d86c4ccf13cee22d3bc

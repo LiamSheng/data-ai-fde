@@ -72,6 +72,11 @@ under `/Volumes/<catalog>/<bronze_schema>/checkpoints/landing_autoloader/v1/`.
   file's `capture_attempts` row; `mode=waive_quarantine` closes files that will
   never convert with a `waived` event. Triage and both modes:
   `ingestion/QUARANTINE.md`.
+- Alerts: a `health_check` task after ingestion fails the run when a realtime
+  feed's latest successful capture in Bronze is older than
+  `max_capture_age_minutes` (default 60), or when quarantined files are open; the
+  job emails the user who deployed it on any failure. The job is still manual
+  (scheduling is KAN-36), so the check runs only when someone runs the job.
 - Reset: a new checkpoint directory (bump `v2`) rediscovers all of Landing into
   `audit_inbox`; already converted audits are not pending, and any row written
   again merges as a no-op.
