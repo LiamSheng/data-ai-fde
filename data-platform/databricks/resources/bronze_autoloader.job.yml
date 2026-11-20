@@ -6,9 +6,15 @@ resources:
         Manual Auto Loader ingestion of every Landing audit into Bronze (KAN-35).
         Not scheduled; the slice Job keeps the bounded loader until the cutover.
         The mode parameter also replays or waives quarantined audits
-        (ingestion/QUARANTINE.md).
+        (ingestion/QUARANTINE.md); a health check task then fails the run on stale
+        feeds or open quarantine.
       max_concurrent_runs: 1
       timeout_seconds: 7200
+      # The health_check task fails on stale feeds or open quarantine; this turns
+      # that, and any other failure, into an email to whoever deployed the bundle.
+      email_notifications:
+        on_failure:
+          - ${workspace.current_user.userName}
       # Run-time choices: databricks bundle run -t main transit_bronze_autoloader
       #   --params mode=replay_quarantine
       parameters:
@@ -42,3 +48,18 @@ resources:
               mode: "{{job.parameters.mode}}"
               audit_refs: "{{job.parameters.audit_refs}}"
               waive_reason: "{{job.parameters.waive_reason}}"
+        - task_key: health_check
+          depends_on:
+            - task_key: landing_autoloader
+          environment_key: bronze
+          timeout_seconds: 600
+          max_retries: 0
+          retry_on_timeout: false
+          disable_auto_optimization: true
+          notebook_task:
+            source: WORKSPACE
+            notebook_path: ../ingestion/health_check.py
+            base_parameters:
+              catalog: ${var.catalog}
+              bronze_schema: ${var.schema_prefix}_bronze
+              max_capture_age_minutes: ${var.max_capture_age_minutes}

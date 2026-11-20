@@ -120,6 +120,7 @@ for job in jobs.values():
 notebooks = {
     ("transit_slice", "landing_to_bronze"): "landing_to_bronze.py",
     ("transit_bronze_autoloader", "landing_autoloader"): "landing_autoloader.py",
+    ("transit_bronze_autoloader", "health_check"): "health_check.py",
 }
 for (job_key, task_key), notebook in notebooks.items():
     ingestion = next(
