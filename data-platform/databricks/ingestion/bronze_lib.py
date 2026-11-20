@@ -31,7 +31,9 @@ SCHEMAS = {
     "routes": "static_payload_sha256 STRING, route_id STRING, agency_id STRING, route_short_name STRING, route_long_name STRING, route_type STRING, raw_route_json STRING, parser_version STRING, record_sha256 STRING, ingested_at_utc TIMESTAMP",
     "calendar": "static_payload_sha256 STRING, service_id STRING, monday STRING, tuesday STRING, wednesday STRING, thursday STRING, friday STRING, saturday STRING, sunday STRING, start_date STRING, end_date STRING, raw_calendar_json STRING, parser_version STRING, record_sha256 STRING, ingested_at_utc TIMESTAMP",
     "calendar_dates": "static_payload_sha256 STRING, service_id STRING, date STRING, exception_type STRING, raw_calendar_date_json STRING, parser_version STRING, record_sha256 STRING, ingested_at_utc TIMESTAMP",
-    # Append-only events: a file is quarantined, later perhaps resolved by replay.
+    # Append-only events: a file is quarantined, later perhaps resolved by replay or
+    # waived by an operator. failed_check holds the failed check of a quarantined
+    # event and the operator's reason of a waived one; it is null on resolved.
     # ingested_at_utc is when the event was first recorded.
     "quarantine": "audit_ref STRING, audit_sha256 STRING, feed_type STRING, event STRING, failed_check STRING, parser_version STRING, record_sha256 STRING, ingested_at_utc TIMESTAMP",
 }
@@ -192,17 +194,22 @@ class SparkTables:
             row[0] for row in self.spark.table(table).select("attempt_id").collect()
         }
 
-    def unresolved_quarantine(self):
-        """Quarantined audit refs without a later resolved event, sorted."""
+    def quarantine_events(self):
+        """Every quarantine event; their meaning is bronze_autoloader.quarantine_state.
+
+        Read whole: quarantine holds one or a few rows per bad file, so it stays
+        small unless the source contract breaks wholesale.
+        """
         table = f"{self.namespace}.quarantine"
         if not self.spark.catalog.tableExists(table):
             return []
-        rows = self.spark.sql(
-            f"SELECT DISTINCT audit_ref FROM {table} q WHERE event = 'quarantined' "
-            f"AND NOT EXISTS (SELECT 1 FROM {table} r WHERE r.event = 'resolved' "
-            "AND r.audit_ref = q.audit_ref) ORDER BY audit_ref"
-        ).collect()
-        return [row[0] for row in rows]
+        columns = (
+            "audit_ref, audit_sha256, feed_type, event, failed_check, ingested_at_utc"
+        )
+        return [
+            row.asDict()
+            for row in self.spark.sql(f"SELECT {columns} FROM {table}").collect()
+        ]
 
     def merge(self, name, records):
         # Created on the first write, so a contract error leaves no new schema behind.

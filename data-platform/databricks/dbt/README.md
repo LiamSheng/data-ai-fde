@@ -67,9 +67,11 @@ under `/Volumes/<catalog>/<bronze_schema>/checkpoints/landing_autoloader/v1/`.
   merges make that a no-op for rows already written.
 - Each chunk writes content tables, then `quarantine`, then `capture_attempts`, the
   commit marker Silver joins on.
-- `mode=replay_quarantine` re-runs unresolved files through the same conversion (for
+- `mode=replay_quarantine` re-runs open files through the same conversion (for
   a fixed parser or a late payload) and appends a `resolved` event after the
-  file's `capture_attempts` row.
+  file's `capture_attempts` row; `mode=waive_quarantine` closes files that will
+  never convert with a `waived` event. Triage and both modes:
+  `ingestion/QUARANTINE.md`.
 - Reset: a new checkpoint directory (bump `v2`) rediscovers all of Landing into
   `audit_inbox`; already converted audits are not pending, and any row written
   again merges as a no-op.

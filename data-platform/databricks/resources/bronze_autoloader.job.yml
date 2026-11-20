@@ -5,8 +5,19 @@ resources:
       description: >-
         Manual Auto Loader ingestion of every Landing audit into Bronze (KAN-35).
         Not scheduled; the slice Job keeps the bounded loader until the cutover.
+        The mode parameter also replays or waives quarantined audits
+        (ingestion/QUARANTINE.md).
       max_concurrent_runs: 1
       timeout_seconds: 7200
+      # Run-time choices: databricks bundle run -t main transit_bronze_autoloader
+      #   --params mode=replay_quarantine
+      parameters:
+        - name: mode
+          default: stream
+        - name: audit_refs
+          default: ""
+        - name: waive_reason
+          default: ""
       environments:
         - environment_key: bronze
           spec:
@@ -28,4 +39,6 @@ resources:
               bronze_schema: ${var.schema_prefix}_bronze
               landing_root: ${var.landing_root}
               max_files_per_trigger: ${var.max_files_per_trigger}
-              mode: stream
+              mode: "{{job.parameters.mode}}"
+              audit_refs: "{{job.parameters.audit_refs}}"
+              waive_reason: "{{job.parameters.waive_reason}}"

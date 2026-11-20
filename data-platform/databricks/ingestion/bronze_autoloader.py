@@ -172,15 +172,104 @@ def ingest_audits(landing, tables, files, now=None):
     return result
 
 
+WAIVE_REASON_LIMIT = 200
+
+
+class WaiverError(ValueError):
+    """An operator's waiver request that cannot be applied; its message is safe to show."""
+
+
+def quarantine_state(events):
+    """Each quarantined audit's state, derived from the append-only events.
+
+    A file is open from its first 'quarantined' event until a 'resolved' event
+    (replay converted it) or a 'waived' event (an operator gave it up) closes it.
+    Nothing reopens a closed file: its audit_ref is in quarantine, so the stream
+    never converts it again, and replay reads only open files. The latest
+    'quarantined' event gives the audit's hash, feed and failed check.
+    """
+    by_ref = {}
+    for event in events:
+        by_ref.setdefault(event["audit_ref"], []).append(event)
+    states = {}
+    for ref, ref_events in by_ref.items():
+        quarantined = [e for e in ref_events if e["event"] == "quarantined"]
+        if not quarantined:
+            continue
+        kinds = {e["event"] for e in ref_events}
+        latest = max(quarantined, key=lambda e: e["ingested_at_utc"])
+        states[ref] = {
+            "status": "resolved"
+            if "resolved" in kinds
+            else "waived"
+            if "waived" in kinds
+            else "open",
+            "audit_sha256": latest["audit_sha256"],
+            "feed_type": latest["feed_type"],
+            "failed_check": latest["failed_check"],
+        }
+    return states
+
+
+def quarantine_summary(tables):
+    """Quarantined audits per state, for run output and the health check."""
+    counts = {"open": 0, "resolved": 0, "waived": 0}
+    for state in quarantine_state(tables.quarantine_events()).values():
+        counts[state["status"]] += 1
+    return counts
+
+
+def open_quarantine(tables):
+    """Audit refs still waiting in quarantine, sorted."""
+    states = quarantine_state(tables.quarantine_events())
+    return sorted(ref for ref, state in states.items() if state["status"] == "open")
+
+
+def waive_quarantine(tables, refs, reason, now=None):
+    """Close open quarantined audits that will never convert, with a reason.
+
+    For a file that is truly corrupt or gone. It appends one 'waived' event per
+    audit_ref, so replay stops retrying it and it no longer counts as open; the
+    'quarantined' event and its failed check stay. The reason is kept in the
+    event's failed_check column. Refs that are not open are refused, so a typo
+    cannot record a waiver for a file that was never quarantined.
+    """
+    reason = reason.strip() if isinstance(reason, str) else ""
+    if not reason or len(reason) > WAIVE_REASON_LIMIT or "\n" in reason:
+        raise WaiverError(
+            f"A waiver needs a one-line reason of at most {WAIVE_REASON_LIMIT} characters"
+        )
+    refs = sorted(set(refs))
+    if not refs:
+        raise WaiverError("Name at least one audit_ref to waive")
+    states = quarantine_state(tables.quarantine_events())
+    not_open = [ref for ref in refs if states.get(ref, {}).get("status") != "open"]
+    if not_open:
+        raise WaiverError(f"Not open in quarantine: {', '.join(not_open[:5])}")
+    events = [
+        {
+            "audit_ref": ref,
+            "audit_sha256": states[ref]["audit_sha256"],
+            "feed_type": states[ref]["feed_type"],
+            "event": "waived",
+            "failed_check": reason,
+            "parser_version": PARSER_VERSION,
+        }
+        for ref in refs
+    ]
+    merged = tables.merge("quarantine", stamp(events, now or datetime.now(UTC)))
+    return {"waived": merged["inserted_rows"], "tables": {"quarantine": merged}}
+
+
 def replay_quarantine(landing, tables, now=None):
-    """Re-run unresolved quarantined audits through the same conversion.
+    """Re-run open quarantined audits through the same conversion.
 
     Quarantine is append-only: a file that now converts gets a 'resolved' event,
     written after its capture_attempts row so a crash in between only means the
-    next replay resolves it again.
+    next replay resolves it again. Waived files are not retried.
     """
     now = now or datetime.now(UTC)
-    refs = tables.unresolved_quarantine()
+    refs = open_quarantine(tables)
     raws = landing.read_present(refs)
     files = [(ref, raws[ref]) for ref in refs if ref in raws]
     result, accepted = _ingest(landing, tables, files, now)
@@ -198,6 +287,7 @@ def replay_quarantine(landing, tables, now=None):
             "unresolved_before": len(refs),
             "audit_missing": len(refs) - len(files),
             "resolved": len(resolved),
+            "still_open": len(refs) - len(resolved),
         }
     )
     return result
