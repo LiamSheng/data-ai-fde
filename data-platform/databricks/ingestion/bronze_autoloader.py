@@ -12,7 +12,7 @@ stay pending for the next one, safely, because every write is an idempotent merg
 import re
 from datetime import UTC, datetime
 
-from bronze_lib import KEYS, stamp
+from bronze_lib import KEYS, SCHEMAS, stamp
 from bronze_records import (
     PARSER_VERSION,
     BronzeContractError,
@@ -436,6 +436,18 @@ def discover(spark, inbox, landing_root, checkpoint_root, max_files, discover_fr
         query.awaitTermination()
 
 
+def ensure_tables(tables):
+    """Leave every Bronze table in place, empty ones included.
+
+    Tables are created on their first write, and quarantine has none until a file
+    breaks the contract; dbt registers every table as a source, so a successful run
+    must leave all of them. Merging no records creates a missing table with its
+    contract properties and checks an existing one, and writes no rows.
+    """
+    for name in SCHEMAS:
+        tables.merge(name, [])
+
+
 def run_autoloader(
     spark, namespace, landing_root, checkpoint_root, max_files, discover_from_utc
 ):
@@ -487,4 +499,5 @@ def run_autoloader(
         # The same file can be discovered twice (e.g. a reset checkpoint); keep one.
         files = {landing.relative(r["path"]): bytes(r["content"]) for r in rows}
         ingest_audits(landing, tables, sorted(files.items()))
+    ensure_tables(tables)
     return {"converted_audits": len(pending), "skipped_before_start": skipped}

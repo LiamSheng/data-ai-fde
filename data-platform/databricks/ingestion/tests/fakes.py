@@ -56,9 +56,6 @@ class FakeTables:
         self.rows = {name: {} for name in KEYS}
         self.writes = 0
 
-    def existing_attempt_ids(self):
-        return {key[0] for key in self.rows["capture_attempts"]}
-
     def merge(self, name, records):
         self.writes += 1
         table, keys = self.rows[name], KEYS[name]
