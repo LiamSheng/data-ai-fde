@@ -6,7 +6,7 @@ import json
 import sys
 import unittest
 import zipfile
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from unittest import mock
 
@@ -22,9 +22,8 @@ from bronze_autoloader import (
     replay_quarantine,
     waive_quarantine,
 )
-from bronze_lib import load
 from bronze_records import BronzeContractError
-from test_load import Bucket, FakeLanding, FakeTables, at
+from fakes import Bucket, FakeLanding, FakeTables, at
 
 NOW = datetime(2026, 11, 5, 20, 0, tzinfo=UTC)
 
@@ -570,29 +569,6 @@ class ReplayAfterParserChange(BatchCase):
             },
         )
         self.assertEqual(open_quarantine(self.tables), [second])
-
-
-class CutoverFromBoundedLoader(unittest.TestCase):
-    """Rows the bounded loader wrote are the rows Auto Loader would write."""
-
-    def test_rediscovering_bounded_loads_inserts_nothing(self):
-        bucket, tables = AuditBucket(), RecordingTables()
-        rt_ref = bucket.vehicles(at("2026-10-13T18:00:00"))
-        static_ref = bucket.schedule(at("2026-10-13T12:00:00"))
-        bucket.trip_updates(at("2026-10-13T18:00:00"), trip_id="A")
-        bucket.trip_updates(at("2026-10-13T18:10:00"), trip_id="B")
-        load(
-            bucket.landing,
-            tables,
-            rt_ref,
-            static_ref,
-            date(2026, 10, 13),
-            date(2026, 10, 13),
-            now=at("2026-10-14T00:00:00"),
-        )
-        result = ingest_audits(bucket.landing, tables, bucket.files(), NOW)
-        for name, written in result["tables"].items():
-            self.assertEqual(written["inserted_rows"], 0, name)
 
 
 class AlertCount(unittest.TestCase):

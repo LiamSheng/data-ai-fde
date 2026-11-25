@@ -98,7 +98,8 @@ databricks bundle deploy   --target dev --profile transit-dev
 databricks bundle run transit_slice --target dev --profile transit-dev
 ```
 
-`transit_slice` is a manual Job: bounded Bronze ingestion, then `dbt build`,
+`transit_bronze_autoloader` (manual) is the only Bronze writer: run it first, then
+`transit_slice` (manual): `dbt build`,
 `dbt run-operation deploy_route_delay_summary` and `dbt docs generate`. Consume
 Gold only after the whole run and its tests pass. The Genie space can only be
 created once its tables exist, so in a fresh workspace deploy, run the Job, then
