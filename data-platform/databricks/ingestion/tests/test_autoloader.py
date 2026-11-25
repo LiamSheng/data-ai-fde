@@ -628,6 +628,20 @@ class PendingAudits(unittest.TestCase):
         inbox = [("old", start_ms - 1), ("edge", start_ms), ("new", start_ms + 1)]
         self.assertEqual(pending_audits(inbox, [], start), (["new"], 2))
 
+    def test_a_ref_discovered_by_two_checkpoints_is_counted_once(self):
+        # KAN-37: v2 and v3 both discovered the audits written after the start.
+        from bronze_autoloader import discover_start, pending_audits
+
+        start = discover_start("2026-11-25T05:00:00Z")
+        start_ms = int(start.timestamp() * 1000)
+        inbox = [
+            ("old", start_ms - 1),
+            ("new", start_ms + 1),
+            ("old", start_ms - 1),
+            ("new", start_ms + 1),
+        ]
+        self.assertEqual(pending_audits(inbox, [], start), (["new"], 1))
+
     def test_done_audits_are_not_counted_as_skipped(self):
         from bronze_autoloader import discover_start, pending_audits
 
