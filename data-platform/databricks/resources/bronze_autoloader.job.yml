@@ -45,6 +45,7 @@ resources:
               bronze_schema: ${var.schema_prefix}_bronze
               landing_root: ${var.landing_root}
               max_files_per_trigger: ${var.max_files_per_trigger}
+              discover_from_utc: ${var.discover_from_utc}
               mode: "{{job.parameters.mode}}"
               audit_refs: "{{job.parameters.audit_refs}}"
               waive_reason: "{{job.parameters.waive_reason}}"
