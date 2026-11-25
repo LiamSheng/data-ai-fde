@@ -118,7 +118,6 @@ for job in jobs.values():
         ):
             raise SystemExit("Retry policy differs from bounded manual acceptance")
 notebooks = {
-    ("transit_slice", "landing_to_bronze"): "landing_to_bronze.py",
     ("transit_bronze_autoloader", "landing_autoloader"): "landing_autoloader.py",
     ("transit_bronze_autoloader", "health_check"): "health_check.py",
 }
@@ -160,7 +159,7 @@ if "macro.transit_transformations.deploy_route_delay_summary" not in manifest["m
 syntax_nodes = [
     node
     for node in manifest["nodes"].values()
-    # Tests of a disabled source (autoloader_bronze off) stay in the manifest, uncompiled.
+    # Tests of a disabled node stay in the manifest, uncompiled.
     if node["resource_type"] in {"model", "test"}
     and node["config"].get("enabled", True)
 ]

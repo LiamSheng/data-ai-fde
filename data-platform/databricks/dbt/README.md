@@ -18,7 +18,8 @@ The execution guide is the local `docs/data-platform/ops/dbt-core-acceptance.md`
   `macros/route_delay_summary.sql` and deployed by the Job's
   `dbt run-operation deploy_route_delay_summary` after `dbt build`. Its cases in
   `dev/function_tests.yml` run offline with `dev/duckdb_check.py function`.
-- DAB describes two manual Jobs, the bounded slice and the Auto Loader ingestion.
+- DAB describes two manual Jobs: the Auto Loader ingestion (the only Bronze writer)
+  and the slice, which runs dbt over what it wrote.
   Terraform retains ownership of Landing access and IAM. No schedules or warehouse resources are defined here.
 
 ### Service Alerts conversion contract
@@ -37,10 +38,8 @@ The offline warehouse translates complete Bronze DDL, including nested
 suite exercises a private 272-entity/888-selector snapshot when available; that
 smoke test skips explicitly in clones without the fixture.
 
-`service_alerts` and `quarantine` are written only by the Auto Loader job, so they
-are dbt sources only when the var `autoloader_bronze` is true (local replay sets it).
-The slice Job keeps the default `false` until the cutover (KAN-37), which turns it
-on and then removes the var. Local nested storage checks do not validate every Spark
+Since the KAN-37 cutover the Auto Loader job writes every Bronze table, so all of
+them, `service_alerts` and `quarantine` included, are plain dbt sources. Local nested storage checks do not validate every Spark
 SQL array operation; translated outer explode drops parents with empty or NULL
 arrays, so any SQL model that explodes a Bronze array needs unit cases for both.
 
