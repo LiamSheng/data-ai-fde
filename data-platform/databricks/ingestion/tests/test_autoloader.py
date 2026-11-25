@@ -587,6 +587,27 @@ class AlertCount(unittest.TestCase):
         )
 
 
+class EnsureTables(unittest.TestCase):
+    def test_every_bronze_table_is_merged_without_rows(self):
+        # KAN-37: quarantine had never been written, so dbt's source tests on it
+        # failed with TABLE_OR_VIEW_NOT_FOUND.
+        from bronze_lib import SCHEMAS
+
+        class Recording(FakeTables):
+            def __init__(self):
+                super().__init__()
+                self.merged = []
+
+            def merge(self, name, records):
+                self.merged.append((name, len(records)))
+                return super().merge(name, records)
+
+        tables = Recording()
+        bronze_autoloader.ensure_tables(tables)
+        self.assertEqual(sorted(tables.merged), sorted((n, 0) for n in SCHEMAS))
+        self.assertEqual(sum(len(rows) for rows in tables.rows.values()), 0)
+
+
 class PendingAudits(unittest.TestCase):
     def test_converted_and_quarantined_audits_are_not_pending(self):
         from bronze_autoloader import pending_audits
