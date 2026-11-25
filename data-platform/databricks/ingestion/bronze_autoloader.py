@@ -348,14 +348,28 @@ def _path_not_found(error):
     return condition() == "PATH_NOT_FOUND" or "Path does not exist" in str(error)
 
 
-def pending_audits(inbox_refs, done_refs):
+def pending_audits(inbox, done_refs, start=None):
     """Discovered audits not yet in capture_attempts or quarantine, oldest first.
 
-    Every converted audit ends in exactly one of the two, so this is the work left
-    after a crash as well as after new discoveries.
+    `inbox` holds (audit_ref, modified_ms) pairs, modified_ms being the file's
+    modification time in epoch milliseconds. Every converted audit ends in exactly
+    one of the two tables, so this is the work left after a crash as well as after
+    new discoveries. With a start, audits modified at or before it are skipped even
+    if they are in the inbox: an earlier checkpoint (or one that ignored
+    modifiedAfter) may have discovered them, and discovery alone must not decide
+    Bronze's coverage. Returns (pending refs, number skipped by the start).
     """
     done = set(done_refs)
-    return [ref for ref in inbox_refs if ref not in done]
+    start_ms = None if start is None else int(start.timestamp() * 1000)
+    pending, skipped = [], 0
+    for ref, modified_ms in inbox:
+        if ref in done:
+            continue
+        if start_ms is not None and modified_ms <= start_ms:
+            skipped += 1
+            continue
+        pending.append(ref)
+    return pending, skipped
 
 
 DISCOVER_ALL = "all"
@@ -371,19 +385,26 @@ def discover_options(discover_from_utc):
     checkpoint is first created, so changing it needs a new checkpoint version.
     """
     options = {"cloudFiles.includeExistingFiles": "true"}
-    if discover_from_utc == DISCOVER_ALL:
+    start = discover_start(discover_from_utc)
+    if start is None:
         return options
+    # Spark reads the value in the session time zone, which the notebook sets to UTC.
+    options["modifiedAfter"] = start.strftime("%Y-%m-%dT%H:%M:%S")
+    return options
+
+
+def discover_start(discover_from_utc):
+    """The aware UTC start, or None for `all`; anything else is refused."""
+    if discover_from_utc == DISCOVER_ALL:
+        return None
     try:
-        start = datetime.strptime(discover_from_utc, "%Y-%m-%dT%H:%M:%SZ").replace(
+        return datetime.strptime(discover_from_utc, "%Y-%m-%dT%H:%M:%SZ").replace(
             tzinfo=UTC
         )
     except (TypeError, ValueError):
         raise ValueError(
             "discover_from_utc must be 'all' or a UTC time like 2026-11-25T00:00:00Z"
         ) from None
-    # Spark reads the value in the session time zone, which the notebook sets to UTC.
-    options["modifiedAfter"] = start.strftime("%Y-%m-%dT%H:%M:%S")
-    return options
 
 
 def discover(spark, inbox, landing_root, checkpoint_root, max_files, discover_from_utc):
@@ -417,8 +438,9 @@ def run_autoloader(
 ):
     """Discover with Auto Loader, then convert every pending audit in bounded chunks.
 
-    Returns how many audits were converted. A failure leaves the rest pending;
-    the next run continues, and rows already written merge as no-ops.
+    Returns how many audits were converted and how many the start skipped. A
+    failure leaves the rest pending; the next run continues, and rows already
+    written merge as no-ops.
     """
     from bronze_lib import SparkTables
     from pyspark.sql import functions as F
@@ -437,14 +459,18 @@ def run_autoloader(
                 .distinct()
                 .collect()
             ]
-    paths = {
-        landing.relative(row["path"]): row["path"]
-        for row in spark.table(inbox)
-        .select("path", "modificationTime")
-        .orderBy("modificationTime", "path")
+    rows = (
+        spark.table(inbox)
+        # Epoch milliseconds: no session or driver time zone in the comparison.
+        .select("path", F.expr("unix_millis(modificationTime)").alias("modified_ms"))
+        .orderBy("modified_ms", "path")
         .collect()
-    }
-    pending = pending_audits(list(paths), done)
+    )
+    paths = {landing.relative(row["path"]): row["path"] for row in rows}
+    inbox_refs = [(landing.relative(r["path"]), r["modified_ms"]) for r in rows]
+    pending, skipped = pending_audits(
+        inbox_refs, done, discover_start(discover_from_utc)
+    )
     for offset in range(0, len(pending), max_files):
         chunk = [paths[ref] for ref in pending[offset : offset + max_files]]
         rows = (
@@ -458,4 +484,4 @@ def run_autoloader(
         # The same file can be discovered twice (e.g. a reset checkpoint); keep one.
         files = {landing.relative(r["path"]): bytes(r["content"]) for r in rows}
         ingest_audits(landing, tables, sorted(files.items()))
-    return len(pending)
+    return {"converted_audits": len(pending), "skipped_before_start": skipped}

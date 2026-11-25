@@ -507,7 +507,9 @@ class QuarantineWaiver(BatchCase):
         # latest event, so a waived file is not converted by the stream either.
         waive_quarantine(self.tables, [self.ref], "Gone", NOW)
         done = [event["audit_ref"] for event in self.tables.quarantine_events()]
-        self.assertEqual(bronze_autoloader.pending_audits([self.ref], done), [])
+        self.assertEqual(
+            bronze_autoloader.pending_audits([(self.ref, 0)], done), ([], 0)
+        )
 
 
 class ReplayAfterParserChange(BatchCase):
@@ -613,9 +615,30 @@ class PendingAudits(unittest.TestCase):
     def test_converted_and_quarantined_audits_are_not_pending(self):
         from bronze_autoloader import pending_audits
 
-        self.assertEqual(
-            pending_audits(["a", "b", "c", "d"], ["b", "d", "z"]), ["a", "c"]
-        )
+        inbox = [("a", 1), ("b", 2), ("c", 3), ("d", 4)]
+        self.assertEqual(pending_audits(inbox, ["b", "d", "z"]), (["a", "c"], 0))
+
+    def test_audits_modified_up_to_the_start_are_skipped_even_when_discovered(self):
+        # KAN-37: a run deployed without the start discovered all of Landing into
+        # the inbox; the start must still decide what converts.
+        from bronze_autoloader import discover_start, pending_audits
+
+        start = discover_start("2026-11-25T05:00:00Z")
+        start_ms = int(start.timestamp() * 1000)
+        inbox = [("old", start_ms - 1), ("edge", start_ms), ("new", start_ms + 1)]
+        self.assertEqual(pending_audits(inbox, [], start), (["new"], 2))
+
+    def test_done_audits_are_not_counted_as_skipped(self):
+        from bronze_autoloader import discover_start, pending_audits
+
+        start = discover_start("2026-11-25T05:00:00Z")
+        self.assertEqual(pending_audits([("old", 0)], ["old"], start), ([], 0))
+
+    def test_all_converts_every_discovered_audit(self):
+        from bronze_autoloader import discover_start, pending_audits
+
+        self.assertIsNone(discover_start("all"))
+        self.assertEqual(pending_audits([("old", 0)], [], None), (["old"], 0))
 
 
 if __name__ == "__main__":

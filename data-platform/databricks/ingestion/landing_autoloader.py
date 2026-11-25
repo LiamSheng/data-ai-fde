@@ -74,7 +74,7 @@ try:
             int(max_files),
             discover_from_utc,
         )
-        result = {"mode": mode, "converted_audits": converted}
+        result = {"mode": mode, **converted}
     elif mode == "replay_quarantine":
         result = {
             "mode": mode,
