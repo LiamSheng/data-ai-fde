@@ -2,7 +2,8 @@
 # MAGIC %md
 # MAGIC # Landing audits to Bronze with Auto Loader
 # MAGIC `mode=stream` drains every audit Auto Loader has not seen yet (availableNow), one
-# MAGIC checkpoint per audit prefix in the schema's `checkpoints` Volume. Contract
+# MAGIC checkpoint per audit prefix in the schema's `checkpoints` Volume. A new checkpoint
+# MAGIC starts at `discover_from_utc`: `all` (full backfill) or a UTC time. Contract
 # MAGIC failures go to `quarantine`; `mode=replay_quarantine` re-runs the open ones, and
 # MAGIC `mode=waive_quarantine` closes the `audit_refs` named (space-separated) with a
 # MAGIC `waive_reason`. Runbook: ingestion/QUARANTINE.md.
@@ -28,6 +29,8 @@ dbutils.widgets.text("max_files_per_trigger", "50")
 dbutils.widgets.text("mode", "stream")
 dbutils.widgets.text("audit_refs", "")
 dbutils.widgets.text("waive_reason", "")
+# No default: `all` (full backfill) or a UTC start time must be chosen explicitly.
+dbutils.widgets.text("discover_from_utc", "")
 
 catalog = identifier(dbutils.widgets.get("catalog"))
 schema = identifier(dbutils.widgets.get("bronze_schema"))
@@ -48,9 +51,12 @@ if not all(re.fullmatch(bronze_records.AUDIT_PATH, ref) for ref in audit_refs):
     raise ValueError("audit_refs must be audit/<prefix>/<attempt_id>.json paths")
 if mode != "waive_quarantine" and audit_refs:
     raise ValueError("audit_refs is only used with mode=waive_quarantine")
+discover_from_utc = dbutils.widgets.get("discover_from_utc")
+# Validate before any Spark work; the options themselves are applied in discover().
+bronze_autoloader.discover_options(discover_from_utc)
 
 namespace = f"{catalog}.{schema}"
-checkpoint_root = f"/Volumes/{catalog}/{schema}/checkpoints/landing_autoloader/v2/"
+checkpoint_root = f"/Volumes/{catalog}/{schema}/checkpoints/landing_autoloader/v3/"
 
 # COMMAND ----------
 
@@ -61,7 +67,12 @@ spark.sql(f"CREATE VOLUME IF NOT EXISTS {namespace}.checkpoints")
 try:
     if mode == "stream":
         converted = bronze_autoloader.run_autoloader(
-            spark, namespace, landing_root, checkpoint_root, int(max_files)
+            spark,
+            namespace,
+            landing_root,
+            checkpoint_root,
+            int(max_files),
+            discover_from_utc,
         )
         result = {"mode": mode, "converted_audits": converted}
     elif mode == "replay_quarantine":
@@ -107,6 +118,7 @@ result.update(
         "status": "PASS",
         "namespace": namespace,
         "checkpoint_root": checkpoint_root,
+        "discover_from_utc": discover_from_utc,
         "finished_at_utc": datetime.now(UTC).isoformat(),
         "capture_attempts": [row.asDict() for row in attempts],
         "quarantine": bronze_autoloader.quarantine_summary(tables),

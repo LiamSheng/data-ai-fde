@@ -620,3 +620,21 @@ class PendingAudits(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class DiscoverStartTest(unittest.TestCase):
+    """Where a new checkpoint starts is an explicit choice (KAN-37)."""
+
+    def test_all_takes_every_existing_audit(self):
+        options = bronze_autoloader.discover_options("all")
+        self.assertEqual(options, {"cloudFiles.includeExistingFiles": "true"})
+
+    def test_a_utc_time_skips_audits_modified_before_it(self):
+        options = bronze_autoloader.discover_options("2026-11-25T00:00:00Z")
+        self.assertEqual(options["modifiedAfter"], "2026-11-25T00:00:00")
+        self.assertEqual(options["cloudFiles.includeExistingFiles"], "true")
+
+    def test_no_choice_is_refused(self):
+        for value in ("", None, "2026-11-25", "2026-11-25T00:00:00", "yesterday"):
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                bronze_autoloader.discover_options(value)

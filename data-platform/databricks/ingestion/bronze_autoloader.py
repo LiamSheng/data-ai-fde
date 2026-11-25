@@ -358,18 +358,47 @@ def pending_audits(inbox_refs, done_refs):
     return [ref for ref in inbox_refs if ref not in done]
 
 
-def discover(spark, inbox, landing_root, checkpoint_root, max_files):
+DISCOVER_ALL = "all"
+
+
+def discover_options(discover_from_utc):
+    """Auto Loader options that set where discovery starts, from an explicit choice.
+
+    `all` takes every audit already in Landing (a full backfill); a UTC timestamp
+    (YYYY-MM-DDTHH:MM:SSZ) takes only audits modified after it. There is no default:
+    an empty value would silently mean one or the other, and the two differ in cost
+    and in Bronze's coverage start. Auto Loader evaluates the start only when a
+    checkpoint is first created, so changing it needs a new checkpoint version.
+    """
+    options = {"cloudFiles.includeExistingFiles": "true"}
+    if discover_from_utc == DISCOVER_ALL:
+        return options
+    try:
+        start = datetime.strptime(discover_from_utc, "%Y-%m-%dT%H:%M:%SZ").replace(
+            tzinfo=UTC
+        )
+    except (TypeError, ValueError):
+        raise ValueError(
+            "discover_from_utc must be 'all' or a UTC time like 2026-11-25T00:00:00Z"
+        ) from None
+    # Spark reads the value in the session time zone, which the notebook sets to UTC.
+    options["modifiedAfter"] = start.strftime("%Y-%m-%dT%H:%M:%S")
+    return options
+
+
+def discover(spark, inbox, landing_root, checkpoint_root, max_files, discover_from_utc):
     """Append newly arrived audit files (path and bytes) to the inbox Delta table.
 
     A plain Delta sink, not foreachBatch: on serverless (Spark Connect) a Python
     batch function must be pickled, and the protobuf descriptors the converters
     use cannot be. The sink gives exactly-once discovery; conversion runs after.
     """
+    start_options = discover_options(discover_from_utc)
     for prefix in AUDIT_PREFIXES:
         query = (
             spark.readStream.format("cloudFiles")
             .option("cloudFiles.format", "binaryFile")
-            .option("cloudFiles.includeExistingFiles", "true")
+            .options(**start_options)
             .option("cloudFiles.maxFilesPerTrigger", str(max_files))
             .option("pathGlobFilter", "*.json")
             .load(landing_root + prefix)
@@ -383,7 +412,9 @@ def discover(spark, inbox, landing_root, checkpoint_root, max_files):
         query.awaitTermination()
 
 
-def run_autoloader(spark, namespace, landing_root, checkpoint_root, max_files):
+def run_autoloader(
+    spark, namespace, landing_root, checkpoint_root, max_files, discover_from_utc
+):
     """Discover with Auto Loader, then convert every pending audit in bounded chunks.
 
     Returns how many audits were converted. A failure leaves the rest pending;
@@ -393,7 +424,7 @@ def run_autoloader(spark, namespace, landing_root, checkpoint_root, max_files):
     from pyspark.sql import functions as F
 
     inbox = f"{namespace}.audit_inbox"
-    discover(spark, inbox, landing_root, checkpoint_root, max_files)
+    discover(spark, inbox, landing_root, checkpoint_root, max_files, discover_from_utc)
     landing = SparkAuditLanding(spark, landing_root)
     tables = SparkTables(spark, namespace)
     done = []

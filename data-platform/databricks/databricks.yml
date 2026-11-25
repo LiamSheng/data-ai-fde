@@ -32,6 +32,11 @@ variables:
   max_files_per_trigger:
     description: Audits per Auto Loader micro-batch; bounds payload bytes held on the driver.
     default: "50"
+  discover_from_utc:
+    description: >-
+      Where a new Auto Loader checkpoint starts discovering Landing audits: `all`
+      (full backfill) or a UTC time like 2026-11-25T00:00:00Z. Read only when the
+      checkpoint is created; also each feed's Bronze coverage start (KAN-37).
   max_capture_age_minutes:
     description: Health check fails when a realtime feed's latest successful capture in Bronze is older.
     default: "60"
@@ -63,3 +68,6 @@ targets:
   # delete the showcase Job, which main does not define.
   main:
     mode: development
+    variables:
+      # KAN-37 cutover without backfill: Bronze coverage starts here for this target.
+      discover_from_utc: "2026-11-25T05:00:00Z"
