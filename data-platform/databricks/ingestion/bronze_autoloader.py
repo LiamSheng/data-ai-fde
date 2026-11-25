@@ -357,14 +357,17 @@ def pending_audits(inbox, done_refs, start=None):
     new discoveries. With a start, audits modified at or before it are skipped even
     if they are in the inbox: an earlier checkpoint (or one that ignored
     modifiedAfter) may have discovered them, and discovery alone must not decide
-    Bronze's coverage. Returns (pending refs, number skipped by the start).
+    Bronze's coverage. The inbox can hold one ref more than once (every checkpoint
+    version discovers it again); each ref is counted once. Returns (pending refs,
+    number skipped by the start).
     """
     done = set(done_refs)
     start_ms = None if start is None else int(start.timestamp() * 1000)
-    pending, skipped = [], 0
+    pending, skipped, seen = [], 0, set()
     for ref, modified_ms in inbox:
-        if ref in done:
+        if ref in done or ref in seen:
             continue
+        seen.add(ref)
         if start_ms is not None and modified_ms <= start_ms:
             skipped += 1
             continue
