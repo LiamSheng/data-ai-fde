@@ -64,3 +64,6 @@ resources:
               catalog: ${var.catalog}
               bronze_schema: ${var.schema_prefix}_bronze
               max_capture_age_minutes: ${var.max_capture_age_minutes}
+              landing_root: ${var.landing_root}
+              discover_from_utc: ${var.discover_from_utc}
+              coverage_settle_minutes: ${var.coverage_settle_minutes}

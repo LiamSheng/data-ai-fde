@@ -149,10 +149,11 @@ The selected Static content version is an explicit label reference:
 has been established. Freshness uses the audit completion timestamp minus feed
 timestamp. Neither dbt build success nor table modification time proves a feed SLA.
 
-The selected-sample reconciliation expects 2 attempts, 779 entities, 239 routes
-and 779 observed vehicles, based on the supplied sample output. For a different
-sample, update the sample variables/expectations together, or explicitly set
-`verify_sample: false` and agree replacement reconciliation evidence.
+Reconciliation runs over every capture, not one fixed sample (KAN-36):
+`trip_update_audit_reconciliation` and `realtime_audit_reconciliation` check each
+successful audit's entity and entity-type counts against the Bronze rows, and
+`gold_reconciles_observations` checks Gold's per-route vehicle sums against each
+snapshot.
 
 `fct_trip_delay_sample` holds one Delay sample per snapshot (distinct Trip Updates
 payload) and non-canceled trip, measured at its Next stop (terms in `CONTEXT.md`,

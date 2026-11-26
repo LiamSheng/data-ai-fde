@@ -106,10 +106,22 @@ run(
     ]
 )
 jobs = bundle["resources"]["jobs"]
-if set(jobs) != {"transit_slice", "transit_bronze_autoloader"} or any(
-    "schedule" in job or "trigger" in job for job in jobs.values()
+# Only the slice Job is scheduled, and it deploys paused (KAN-36): resuming is a
+# deliberate cost decision made in the Jobs UI, never a side effect of a deploy.
+if (
+    set(jobs) != {"transit_slice", "transit_bronze_autoloader"}
+    or any("trigger" in job or "continuous" in job for job in jobs.values())
+    or "schedule" in jobs["transit_bronze_autoloader"]
+    or jobs["transit_slice"].get("schedule", {}).get("pause_status") != "PAUSED"
 ):
     raise SystemExit("Unexpected scheduled resource")
+slice_tasks = {task["task_key"]: task for task in jobs["transit_slice"]["tasks"]}
+if slice_tasks.get("bronze_ingestion", {}).get("run_job_task", {}).get(
+    "job_id"
+) != "${resources.jobs.transit_bronze_autoloader.id}" or slice_tasks["dbt_build"].get(
+    "depends_on"
+) != [{"task_key": "bronze_ingestion"}]:
+    raise SystemExit("The slice must run Bronze ingestion before dbt")
 for job in jobs.values():
     for task in job["tasks"]:
         if (

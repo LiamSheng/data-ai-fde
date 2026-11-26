@@ -127,3 +127,44 @@ separately: query `capture_attempts` (attempts per `feed_type` over time), the o
 source of truth for which captures Bronze holds. A gap there is a time with no
 capture in Bronze, so answers spanning it must say which dates their samples
 come from.
+
+**Schedule.** `transit_slice` runs `transit_bronze_autoloader` as its first task,
+then dbt; a failed ingestion or health check stops the run before dbt, so Gold is
+only rebuilt from healthy Bronze. It is scheduled hourly at :07 UTC and deploys
+**paused** (`check_local.py` refuses anything else). Resuming is a cost decision:
+do it by hand in the Jobs UI (a development-mode deploy pauses it again).
+
+**Health check** (task `health_check`, fails the run and emails the deployer):
+
+| Check | Guards against | Not covered |
+|---|---|---|
+| Freshness: each realtime feed's latest successful capture in Bronze is under `max_capture_age_minutes` (60) old | stopped collector, expired API key, stalled ingestion | Static schedule (captured daily) |
+| Open quarantine | a file broke the contract and nobody replayed or waived it | |
+| Coverage: lists Landing's audit prefixes directly; every audit modified after `discover_from_utc` and more than `coverage_settle_minutes` (15) ago must be in `capture_attempts` or `quarantine` | discovered but not written, and never discovered by Auto Loader | audits up to `discover_from_utc` (outside Bronze by design); the last 15 minutes (next run's work) |
+
+Coverage lists every audit on every run, so its cost grows with Landing
+(about 430 audits a day). Split it into a cheap per-run check and a daily full
+listing when that cost matters.
+
+**Checkpoint.** Auto Loader state lives in
+`/Volumes/<catalog>/<bronze_schema>/checkpoints/landing_autoloader/v3/`, one
+directory per audit prefix; discovered files go to the `audit_inbox` table.
+Conversion is driven by the inbox minus `capture_attempts` and `quarantine`, so
+the checkpoint only decides what is discovered, never what Bronze holds.
+
+- *Reset*: bump the version in `landing_autoloader.py` (`v3` → `v4`). The new
+  checkpoint rediscovers Landing from `discover_from_utc`; rediscovered audits
+  already in Bronze merge as no-ops. Never delete the inbox or Bronze tables.
+- *Backfill*: set `discover_from_utc` to an earlier time (or `all`) and reset the
+  checkpoint. Cost scales with Landing's size (discovery) and the audits
+  converted: at the KAN-37 cutover (2026-11-25), discovering about 14,000 audits
+  took about 37 minutes and converting about 1,400 took about 26.
+
+**Intentionally not protected** (worst case accepted; revisit if it changes):
+
+- Two Jobs writing `transit_dev_bronze` at once (the dev target's autoloader copy
+  is never run): insert-only merges make the worst case repeated work.
+- Landing objects deleted or rewritten after conversion: Bronze keeps what it
+  converted; replay reads Landing again and stops on an immutable key collision.
+- Bronze content checks are contract checks (bytes, counts, types), not
+  plausibility; delay outliers are Silver's and Gold's tests.
