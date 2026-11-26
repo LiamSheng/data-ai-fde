@@ -93,10 +93,13 @@ a completed capture: check executions, logs and durable audit records together.
 **Databricks.** From `databricks/`, with a CLI profile named `transit-dev`:
 
 ```sh
-databricks bundle validate --target dev --profile transit-dev
-databricks bundle deploy   --target dev --profile transit-dev
-databricks bundle run transit_slice --target dev --profile transit-dev
+databricks bundle validate --target main --profile transit-dev
+databricks bundle deploy   --target main --profile transit-dev
+databricks bundle run transit_bronze_autoloader --target main --profile transit-dev
+databricks bundle run transit_slice --target main --profile transit-dev
 ```
+
+Deploy `main` from the `main` branch; the `showcase` branch owns the `dev` deployment.
 
 `transit_bronze_autoloader` (manual) is the only Bronze writer: run it first, then
 `transit_slice` (manual): `dbt build`,
@@ -109,4 +112,18 @@ deploy again. To change the space, edit `databricks/genie/instructions.md` or
 fresh clone), and redeploy.
 
 Runs cost Serverless Jobs and SQL warehouse compute. The dev target shares the
-`transit_dev_*` schemas, so keep one writer.
+`transit_dev_*` schemas, so keep one writer: only `main`'s
+`transit_bronze_autoloader` writes `transit_dev_bronze`. Running the dev target's
+copy at the same time is not guarded (intentionally): every write is an
+insert-only merge, so the worst case is repeated work, not wrong rows.
+
+**Bronze coverage.** Bronze holds what was converted, not all of Landing. The
+cutover (KAN-37) did not backfill; `discover_from_utc` sets where a new Auto Loader
+checkpoint starts (`main`: `2026-11-25T05:00:00Z`). As of that cutover, each
+realtime feed covers 2026-10-10 to 2026-10-25 04:00 UTC (the retired bounded
+loader, plus one run before the start was enforced) and continuously from
+2026-11-25 05:00 UTC; there is no data in between. The coverage is not stored
+separately: query `capture_attempts` (attempts per `feed_type` over time), the one
+source of truth for which captures Bronze holds. A gap there is a time with no
+capture in Bronze, so answers spanning it must say which dates their samples
+come from.
