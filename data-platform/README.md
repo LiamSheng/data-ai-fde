@@ -130,8 +130,8 @@ come from.
 
 **Schedule.** `transit_slice` runs `transit_bronze_autoloader` as its first task,
 then dbt; a failed ingestion or health check stops the run before dbt, so Gold is
-only rebuilt from healthy Bronze. It is scheduled hourly at :07 UTC and deploys
-**paused** (`check_local.py` refuses anything else). Resuming is a cost decision:
+only rebuilt from healthy Bronze. It is scheduled daily at 16:07 UTC (09:07
+Vancouver, after the Static capture), for cost, and deploys **paused** (`check_local.py` refuses anything else). Resuming is a cost decision:
 do it by hand in the Jobs UI (a development-mode deploy pauses it again).
 
 **Health check** (task `health_check`, fails the run and emails the deployer):
