@@ -26,6 +26,11 @@ variables:
       Where a new Auto Loader checkpoint starts discovering Landing audits: `all`
       (full backfill) or a UTC time like 2026-11-25T00:00:00Z. Read only when the
       checkpoint is created; also each feed's Bronze coverage start (KAN-37).
+  coverage_settle_minutes:
+    description: >-
+      Health check coverage skips Landing audits modified this recently: the
+      collector may have written them after this run's discovery.
+    default: "15"
   max_capture_age_minutes:
     description: Health check fails when a realtime feed's latest successful capture in Bronze is older.
     default: "60"

@@ -443,7 +443,7 @@ def replay(sql):
         trip_update_records,
     )
 
-    manifest = compile_manifest({"verify_sample": False})
+    manifest = compile_manifest({})
     warehouse = Warehouse(manifest)
 
     def load(name, records):

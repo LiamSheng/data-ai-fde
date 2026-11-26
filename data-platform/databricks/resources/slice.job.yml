@@ -3,10 +3,20 @@ resources:
     transit_slice:
       name: transit-realtime-slice-${bundle.target}
       description: >-
-        Manual checked SQL transformations over the Bronze tables the Auto Loader job
-        writes (transit_bronze_autoloader, the only Bronze writer since KAN-37).
+        Bronze ingestion (runs transit_bronze_autoloader, the only Bronze writer),
+        then checked SQL transformations. A failed ingestion or health check stops
+        the run before dbt, so Gold is only rebuilt from healthy Bronze.
       max_concurrent_runs: 1
       timeout_seconds: 9000
+      # Hourly, created paused (KAN-36). Development-mode deploys keep schedules
+      # paused; resume by hand in the Jobs UI once the cadence and its cost are agreed.
+      schedule:
+        quartz_cron_expression: "0 7 * * * ?"
+        timezone_id: UTC
+        pause_status: PAUSED
+      email_notifications:
+        on_failure:
+          - ${workspace.current_user.userName}
       environments:
         - environment_key: transformations
           spec:
@@ -15,7 +25,17 @@ resources:
               - dbt-core==1.12.5
               - dbt-databricks==1.12.7
       tasks:
+        - task_key: bronze_ingestion
+          max_retries: 0
+          retry_on_timeout: false
+          disable_auto_optimization: true
+          run_job_task:
+            job_id: ${resources.jobs.transit_bronze_autoloader.id}
+            job_parameters:
+              mode: stream
         - task_key: dbt_build
+          depends_on:
+            - task_key: bronze_ingestion
           environment_key: transformations
           timeout_seconds: 900
           max_retries: 0

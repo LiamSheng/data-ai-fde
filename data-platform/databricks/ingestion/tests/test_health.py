@@ -7,7 +7,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from bronze_health import health_problems
+from bronze_health import health_problems, uncovered_audits
 
 NOW = datetime(2026, 11, 19, 20, 5, tzinfo=UTC)
 HOUR = timedelta(minutes=60)
@@ -67,6 +67,48 @@ class HealthProblems(unittest.TestCase):
         for bad in (timedelta(0), timedelta(minutes=-5), 60):
             with self.subTest(max_age=bad), self.assertRaises(ValueError):
                 health_problems(fresh(), CLEAR, NOW, bad)
+
+
+START = NOW - timedelta(days=1)
+SETTLED = NOW - timedelta(minutes=15)
+
+
+class Coverage(unittest.TestCase):
+    def test_an_audit_missing_from_both_tables_is_named(self):
+        # KAN-36 acceptance: delete one capture_attempts row and the check says which.
+        landing = [("audit/a.json", SETTLED - HOUR), ("audit/b.json", SETTLED - HOUR)]
+        self.assertEqual(
+            uncovered_audits(landing, ["audit/a.json"], START, SETTLED),
+            ["audit/b.json"],
+        )
+
+    def test_converted_quarantined_and_waived_audits_are_covered(self):
+        landing = [("audit/a.json", SETTLED - HOUR), ("audit/q.json", SETTLED - HOUR)]
+        done = ["audit/a.json", "audit/q.json"]
+        self.assertEqual(uncovered_audits(landing, done, START, SETTLED), [])
+
+    def test_audits_up_to_the_start_are_not_expected(self):
+        landing = [("audit/old.json", START), ("audit/older.json", START - HOUR)]
+        self.assertEqual(uncovered_audits(landing, [], START, SETTLED), [])
+
+    def test_all_expects_every_settled_audit(self):
+        landing = [("audit/old.json", START - HOUR)]
+        self.assertEqual(
+            uncovered_audits(landing, [], None, SETTLED), ["audit/old.json"]
+        )
+
+    def test_unsettled_audits_are_the_next_runs_work(self):
+        landing = [("audit/new.json", SETTLED), ("audit/newer.json", NOW)]
+        self.assertEqual(uncovered_audits(landing, [], START, SETTLED), [])
+
+    def test_uncovered_audits_are_a_problem_naming_the_first_few(self):
+        refs = [f"audit/{n}.json" for n in range(5)]
+        (problem,) = health_problems(fresh(), CLEAR, NOW, HOUR, refs)
+        self.assertEqual(
+            problem,
+            "5 Landing audit(s) not in Bronze: audit/0.json, audit/1.json, "
+            "audit/2.json and 2 more",
+        )
 
 
 if __name__ == "__main__":
