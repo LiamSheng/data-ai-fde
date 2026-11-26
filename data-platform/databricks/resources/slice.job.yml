@@ -8,10 +8,13 @@ resources:
         the run before dbt, so Gold is only rebuilt from healthy Bronze.
       max_concurrent_runs: 1
       timeout_seconds: 9000
-      # Hourly, created paused (KAN-36). Development-mode deploys keep schedules
-      # paused; resume by hand in the Jobs UI once the cadence and its cost are agreed.
+      # Daily at 16:07 UTC (09:07 Vancouver), just after the 09:00 Static capture, so
+      # one run takes the previous day's realtime captures and the new Static. Daily,
+      # not hourly, for cost (2026-11-26: about $0.5-1 a run against a credit that
+      # an hourly cadence would spend in days). Created paused (KAN-36);
+      # development-mode deploys keep it paused, so resume by hand in the Jobs UI.
       schedule:
-        quartz_cron_expression: "0 7 * * * ?"
+        quartz_cron_expression: "0 7 16 * * ?"
         timezone_id: UTC
         pause_status: PAUSED
       email_notifications:
