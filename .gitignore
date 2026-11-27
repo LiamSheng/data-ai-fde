@@ -19,3 +19,7 @@ CLAUDE.md
 .DS_Store
 .idea/
 .vscode/
+
+# Router eval answers (local evidence, re-scored offline)
+agent-service/evals/results/
+__pycache__/
